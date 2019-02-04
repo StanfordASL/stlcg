@@ -456,6 +456,56 @@ class Until(STL_Formula):
     def __str__(self):
         return  "(" + str(self.subformula1) + ")" + " U " + "(" + str(self.subformula2) + ")"
 
+class Then(STL_Formula):
+    def __init__(self, subformula1="Then subformula1", subformula2="Then subformula2"):
+        super(Then, self).__init__()
+        self.subformula1 = subformula1
+        self.subformula2 = subformula2
+    
+    def robustness_trace(self, trace1, trace2, scale=0):
+        '''
+        trace1 is the robustness trace of ϕ
+        trace2 is the robustness trace of ψ
+        trace1 and trace2 are size [batch_size, time_dim, x_dim]
+        '''
+        Ev = Eventually()
+        minish = Minish()
+        maxish = Maxish()
+        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]])                                  # [batch_size, time_dim, x_dim, time_dim]
+        RHS = torch.ones(LHS.shape)*-1000000                                                    # [batch_size, time_dim, x_dim, time_dim]
+        for i in range(trace2.shape[1]):
+            RHS[:,i:,:,i] = Ev(trace1[:,i:,:])
+        # first min over the (ρ(ψ), ◻ρ(ϕ))
+        # then max over the t′ dimension (the second time_dime dimension)
+        return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1).squeeze(-1), scale=scale, dim=-1).squeeze(-1)                                                              # [batch_size, time_dim, x_dim]
+
+    def robustness(self, trace1, trace2, scale=0, time=-1):
+        '''
+        trace1 and trace2 are size [batch_size, time_dim, x_dim]
+        '''
+        return self.robustness_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
+
+    def eval_trace(self, trace1, trace2, scale=0):
+        '''
+        trace1 and trace2 are size [batch_size, time_dim, x_dim]
+        '''
+        return self.robustness_trace(trace1, trace2, scale) > 0                               # [batch_size, time_dim, x_dim]
+
+    def eval(self, trace1, trace2, scale=0, time=-1):
+        '''
+        trace1 and trace2 are size [batch_size, time_dim, x_dim]
+        '''
+        return self.robustness(trace1, trace2, scale, time) > 0                               # [batch_size, time_dim, x_dim]
+
+    def _next_function(self):
+        # next function is actually input (traverses the graph backwards)
+        return [self.subformula1, self.subformula2] 
+
+    def forward(self, trace1, trace2, scale=0):
+        return self.robustness_trace(trace1, trace2, scale)
+
+    def __str__(self):
+        return  "(" + str(self.subformula1) + ")" + " T " + "(" + str(self.subformula2) + ")"
 
 
 # class STLModel(torch.nn.Module):
