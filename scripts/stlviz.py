@@ -40,12 +40,16 @@ def make_stl_graph(form):
         return str(tensor.numpy())
 
     def add_nodes(form):
+        # green are optimization variables
+        # blue are non-optimization variables
+        # orange are formula nodes
         if torch.is_tensor(form):
-            dot.node(str(id(form)), tensor_to_str(form), fillcolor="orange")
+            color = "lightgreen" if form.requires_grad else "lightskyblue"
+            dot.node(str(id(form)), tensor_to_str(form), fillcolor=color)
         elif type(form) == str:
-            dot.node(str(id(form)), form, fillcolor="orange")
+            dot.node(str(id(form)), form, fillcolor="lightskyblue")
         else:
-            dot.node(str(id(form)), form._get_name(), fillcolor="orange")
+            dot.node(str(id(form)), form._get_name() + "\n" + str(form), fillcolor="orange")
         if hasattr(form, '_next_function'):
             for u in form._next_function():
                 dot.edge(str(id(u)), str(id(form)))

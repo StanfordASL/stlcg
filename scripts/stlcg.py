@@ -1,9 +1,9 @@
 import torch
 import numpy as np
-import tensorflow as tf
 from abc import ABC, abstractmethod
-
+from scripts.util import *
 # Assume inputs are already reversed.
+
 
 class Maxish(torch.nn.Module):
     def __init__(self, name="Maxish input"):
@@ -195,29 +195,29 @@ class LessThan(STL_Formula):
         self.name = name
         self.c = c
 
-    def robustness_trace(self, x, c, scale=1):
+    def robustness_trace(self, x, scale=1):
         if scale == 1:
-            return c - x
-        return (c - x)*scale
+            return self.c - x
+        return (self.c - x)*scale
 
-    def robustness(self, x, c, time=-1, scale=1):
-        return self.robustness_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def robustness(self, x, time=-1, scale=1):
+        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
 
-    def eval_trace(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale) > 0
+    def eval_trace(self, x, scale=1):
+        return self.robustness_trace(x, scale) > 0
 
-    def eval(self, x, c, time=-1, scale=1):
-        return self.eval_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def eval(self, x, time=-1, scale=1):
+        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.name, self.c]  
     
-    def forward(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale)
+    def forward(self, x, scale=1):
+        return self.robustness_trace(x, scale)
 
     def __str__(self):
-        return self.name + " <= " + str(self.c)
+        return self.name + " <= " + tensor_to_str(self.c)
 
 
 class GreaterThan(STL_Formula):
@@ -229,29 +229,29 @@ class GreaterThan(STL_Formula):
         self.name = name
         self.c = c
 
-    def robustness_trace(self, x, c, scale=1):
+    def robustness_trace(self, x, scale=1):
         if scale == 1:
-            return x - c
-        return (x - c)*scale
+            return x - self.c
+        return (x - self.c)*scale
 
-    def robustness(self, x, c, time=-1, scale=1):
-        return self.robustness_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def robustness(self, x, time=-1, scale=1):
+        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
 
-    def eval_trace(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale) > 0
+    def eval_trace(self, x, scale=1):
+        return self.robustness_trace(x, scale) > 0
 
-    def eval(self, x, c, time=-1, scale=1):
-        return self.eval_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def eval(self, x, time=-1, scale=1):
+        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.name, self.c]
 
-    def forward(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale)
+    def forward(self, x, scale=1):
+        return self.robustness_trace(x, scale)
 
     def __str__(self):
-        return self.name + " >= " + str(self.c)
+        return self.name + " >= " + tensor_to_str(self.c)
 
 class Equal(STL_Formula):
     '''
@@ -262,29 +262,29 @@ class Equal(STL_Formula):
         self.name = name
         self.c = c
 
-    def robustness_trace(self, x, c, scale=1):
+    def robustness_trace(self, x, scale=1):
         if scale == 1:
-            return  torch.abs(x - c)
-        return torch.abs(x - c)*scale
+            return  torch.abs(x - self.c)
+        return torch.abs(x - self.c)*scale
 
-    def robustness(self, x, c, time=-1, scale=1):
-        return self.robustness_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def robustness(self, x, time=-1, scale=1):
+        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
 
-    def eval_trace(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale) > 0
+    def eval_trace(self, x, scale=1):
+        return self.robustness_trace(x, scale) > 0
 
-    def eval(self, x, c, time=-1, scale=1):
-        return self.eval_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def eval(self, x, time=-1, scale=1):
+        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.name, self.c] 
 
-    def forward(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale)
+    def forward(self, x, scale=1):
+        return self.robustness_trace(x, scale)
 
     def __str__(self):
-        return self.name + " = " + str(self.c)
+        return self.name + " = " + tensor_to_str(self.c)
 
 class Negation(STL_Formula):
     '''
