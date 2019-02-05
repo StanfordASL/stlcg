@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from scripts.util import *
 # Assume inputs are already reversed.
 
+LARGE_NUMBER = 1E6
 
 class Maxish(torch.nn.Module):
     def __init__(self, name="Maxish input"):
@@ -162,7 +163,7 @@ class Always(Temporal_Operator):
         x is [batch_size, time_dim, x_dim]
         initial rnn state is [batch_size, rnn_dim, x_dim]
         '''
-        init_val = 1E6
+        init_val = LARGE_NUMBER
         h0 = torch.ones([x.shape[0], self.rnn_dim, x.shape[2]])*init_val
         return h0.to(x.device)
 
@@ -179,7 +180,7 @@ class Eventually(Temporal_Operator):
         x is [batch_size, time_dim, x_dim]
         initial rnn state is [batch_size, rnn_dim, x_dim]
         '''
-        init_val = -1E6
+        init_val = -LARGE_NUMBER
         h0 = torch.ones([x.shape[0], self.rnn_dim, x.shape[2]])*init_val
         return h0.to(x.device)
 
