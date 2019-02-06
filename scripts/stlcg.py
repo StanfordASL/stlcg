@@ -1,9 +1,11 @@
 import torch
 import numpy as np
-import tensorflow as tf
 from abc import ABC, abstractmethod
-
+from scripts.util import *
+import IPython
 # Assume inputs are already reversed.
+
+LARGE_NUMBER = 1E4
 
 class Maxish(torch.nn.Module):
     def __init__(self, name="Maxish input"):
@@ -105,7 +107,7 @@ class Temporal_Operator(STL_Formula):
         '''
         raise NotImplementedError("_initialize_rnn_cell is not implemented")
 
-    def _rnn_cell(self, x, h0, scale):
+    def _rnn_cell(self, x, h0, scale, large_num=1E4):
         '''
         x is [batch_size, 1, x_dim]
         h0 is [batch_size, rnn_dim, x_dim]
@@ -120,7 +122,9 @@ class Temporal_Operator(STL_Formula):
             h0x = torch.cat([h0, x], dim=1)                             # [batch_size, rnn_dim+1, x_dim]
             input_ = h0x[:,:self.steps,:]                               # [batch_size, self.steps, x_dim]
             output = self.operation(input_, scale, dim=1)               # [batch_size, 1, x_dim]
-            state = h0x[:,1:,:]                                             # [batch_size, rnn_dim, x_dim]
+            state = h0x[:,1:,:]                                         # [batch_size, rnn_dim, x_dim] 
+
+
         return output, state
 
     def _run_cell(self, x, scale):
@@ -153,16 +157,17 @@ class Temporal_Operator(STL_Formula):
 
 
 class Always(Temporal_Operator):
-    def __init__(self, interval=None, subformula='Always input'):
-        super(Always, self).__init__(subformula, interval)
+    def __init__(self, subformula='Always input', interval=None):
+        super(Always, self).__init__(subformula=subformula, interval=interval)
         self.operation = Minish()
+        self.oper = "min"
 
     def _initialize_rnn_cell(self, x):
         '''
         x is [batch_size, time_dim, x_dim]
         initial rnn state is [batch_size, rnn_dim, x_dim]
         '''
-        init_val = 1E6
+        init_val = LARGE_NUMBER
         h0 = torch.ones([x.shape[0], self.rnn_dim, x.shape[2]])*init_val
         return h0.to(x.device)
 
@@ -170,16 +175,17 @@ class Always(Temporal_Operator):
         return "◻ " + str(self._interval) + "( " + str(self.subformula) + " )"
 
 class Eventually(Temporal_Operator):
-    def __init__(self, interval=None, subformula='Eventually input'):
-        super(Eventually, self).__init__(subformula, interval)
+    def __init__(self, subformula='Eventually input', interval=None):
+        super(Eventually, self).__init__(subformula=subformula, interval=interval)
         self.operation = Maxish()
+        self.oper = "max"
 
     def _initialize_rnn_cell(self, x):
         '''
         x is [batch_size, time_dim, x_dim]
         initial rnn state is [batch_size, rnn_dim, x_dim]
         '''
-        init_val = -1E6
+        init_val = -LARGE_NUMBER
         h0 = torch.ones([x.shape[0], self.rnn_dim, x.shape[2]])*init_val
         return h0.to(x.device)
 
@@ -195,29 +201,29 @@ class LessThan(STL_Formula):
         self.name = name
         self.c = c
 
-    def robustness_trace(self, x, c, scale=1):
+    def robustness_trace(self, x, scale=1):
         if scale == 1:
-            return c - x
-        return (c - x)*scale
+            return self.c - x
+        return (self.c - x)*scale
 
-    def robustness(self, x, c, time=-1, scale=1):
-        return self.robustness_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def robustness(self, x, time=-1, scale=1):
+        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
 
-    def eval_trace(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale) > 0
+    def eval_trace(self, x, scale=1):
+        return self.robustness_trace(x, scale) > 0
 
-    def eval(self, x, c, time=-1, scale=1):
-        return self.eval_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def eval(self, x, time=-1, scale=1):
+        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.name, self.c]  
     
-    def forward(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale)
+    def forward(self, x, scale=1):
+        return self.robustness_trace(x, scale)
 
     def __str__(self):
-        return self.name + " <= " + str(self.c)
+        return self.name + " <= " + tensor_to_str(self.c)
 
 
 class GreaterThan(STL_Formula):
@@ -229,29 +235,29 @@ class GreaterThan(STL_Formula):
         self.name = name
         self.c = c
 
-    def robustness_trace(self, x, c, scale=1):
+    def robustness_trace(self, x, scale=1):
         if scale == 1:
-            return x - c
-        return (x - c)*scale
+            return x - self.c
+        return (x - self.c)*scale
 
-    def robustness(self, x, c, time=-1, scale=1):
-        return self.robustness_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def robustness(self, x, time=-1, scale=1):
+        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
 
-    def eval_trace(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale) > 0
+    def eval_trace(self, x, scale=1):
+        return self.robustness_trace(x, scale) > 0
 
-    def eval(self, x, c, time=-1, scale=1):
-        return self.eval_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def eval(self, x, time=-1, scale=1):
+        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.name, self.c]
 
-    def forward(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale)
+    def forward(self, x, scale=1):
+        return self.robustness_trace(x, scale)
 
     def __str__(self):
-        return self.name + " >= " + str(self.c)
+        return self.name + " >= " + tensor_to_str(self.c)
 
 class Equal(STL_Formula):
     '''
@@ -262,29 +268,29 @@ class Equal(STL_Formula):
         self.name = name
         self.c = c
 
-    def robustness_trace(self, x, c, scale=1):
+    def robustness_trace(self, x, scale=1):
         if scale == 1:
-            return  torch.abs(x - c)
-        return torch.abs(x - c)*scale
+            return  torch.abs(x - self.c)
+        return torch.abs(x - self.c)*scale
 
-    def robustness(self, x, c, time=-1, scale=1):
-        return self.robustness_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def robustness(self, x, time=-1, scale=1):
+        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
 
-    def eval_trace(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale) > 0
+    def eval_trace(self, x, scale=1):
+        return self.robustness_trace(x, scale) > 0
 
-    def eval(self, x, c, time=-1, scale=1):
-        return self.eval_trace(x, c, scale)[:,time,:].unsqueeze(1)
+    def eval(self, x, time=-1, scale=1):
+        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.name, self.c] 
 
-    def forward(self, x, c, scale=1):
-        return self.robustness_trace(x, c, scale)
+    def forward(self, x, scale=1):
+        return self.robustness_trace(x, scale)
 
     def __str__(self):
-        return self.name + " = " + str(self.c)
+        return self.name + " = " + tensor_to_str(self.c)
 
 class Negation(STL_Formula):
     '''
@@ -456,6 +462,56 @@ class Until(STL_Formula):
     def __str__(self):
         return  "(" + str(self.subformula1) + ")" + " U " + "(" + str(self.subformula2) + ")"
 
+class Then(STL_Formula):
+    def __init__(self, subformula1="Then subformula1", subformula2="Then subformula2"):
+        super(Then, self).__init__()
+        self.subformula1 = subformula1
+        self.subformula2 = subformula2
+    
+    def robustness_trace(self, trace1, trace2, scale=0):
+        '''
+        trace1 is the robustness trace of ϕ
+        trace2 is the robustness trace of ψ
+        trace1 and trace2 are size [batch_size, time_dim, x_dim]
+        '''
+        Ev = Eventually()
+        minish = Minish()
+        maxish = Maxish()
+        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]])                                  # [batch_size, time_dim, x_dim, time_dim]
+        RHS = torch.ones(LHS.shape)*-1000000                                                    # [batch_size, time_dim, x_dim, time_dim]
+        for i in range(trace2.shape[1]):
+            RHS[:,i:,:,i] = Ev(trace1[:,i:,:])
+        # first min over the (ρ(ψ), ◻ρ(ϕ))
+        # then max over the t′ dimension (the second time_dime dimension)
+        return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1).squeeze(-1), scale=scale, dim=-1).squeeze(-1)                                                              # [batch_size, time_dim, x_dim]
+
+    def robustness(self, trace1, trace2, scale=0, time=-1):
+        '''
+        trace1 and trace2 are size [batch_size, time_dim, x_dim]
+        '''
+        return self.robustness_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
+
+    def eval_trace(self, trace1, trace2, scale=0):
+        '''
+        trace1 and trace2 are size [batch_size, time_dim, x_dim]
+        '''
+        return self.robustness_trace(trace1, trace2, scale) > 0                               # [batch_size, time_dim, x_dim]
+
+    def eval(self, trace1, trace2, scale=0, time=-1):
+        '''
+        trace1 and trace2 are size [batch_size, time_dim, x_dim]
+        '''
+        return self.robustness(trace1, trace2, scale, time) > 0                               # [batch_size, time_dim, x_dim]
+
+    def _next_function(self):
+        # next function is actually input (traverses the graph backwards)
+        return [self.subformula1, self.subformula2] 
+
+    def forward(self, trace1, trace2, scale=0):
+        return self.robustness_trace(trace1, trace2, scale)
+
+    def __str__(self):
+        return  "(" + str(self.subformula1) + ")" + " T " + "(" + str(self.subformula2) + ")"
 
 
 # class STLModel(torch.nn.Module):
