@@ -137,12 +137,8 @@ class Temporal_Operator(STL_Formula):
             mask = torch.arange(0, self.rnn_dim + 1, 1, dtype=torch.float32)
             mask = bump(mask, torch.relu(self.a), torch.relu(self.b), 20).reshape([1, self.rnn_dim + 1, 1])
             out = bump_transform(self.oper, input_, mask, scale=5, large_num=large_num)
-            # idx = torch.argmin(out)
-            # print("input is ", x, "the min value is ", input_[0,idx,0])
             output = self.operation(out, scale)
             state = input_[:,1:,:]  
-            IPython.embed(banner1 = "break")
-
 
 
         return output, state

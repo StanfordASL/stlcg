@@ -44,7 +44,7 @@ def make_stl_graph(form):
         # blue are non-optimization variables
         # orange are formula nodes
         if torch.is_tensor(form):
-            color = "lightgreen" if form.requires_grad else "lightskyblue"
+            color = "palegreen" if form.requires_grad else "lightskyblue"
             dot.node(str(id(form)), tensor_to_str(form), fillcolor=color)
         elif type(form) == str:
             dot.node(str(id(form)), form, fillcolor="lightskyblue")
