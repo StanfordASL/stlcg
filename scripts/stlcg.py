@@ -90,21 +90,13 @@ class STL_Formula(torch.nn.Module):
 
 
 class Temporal_Operator(STL_Formula):
-    def __init__(self, subformula="Temporal input", interval=None, opt_tau=None):
+    def __init__(self, subformula="Temporal input", interval=None):
         super(Temporal_Operator, self).__init__()
         self.subformula = subformula
-        self.opt_tau = opt_tau
-        if not opt_tau:
-            self.interval = interval
-            self._interval = [0, np.inf] if self.interval is None else self.interval
-            self.rnn_dim = 1 if not self.interval else self.interval[-1]
-            self.steps = 1 if not self.interval else self.interval[-1] - self.interval[0] + 1
-        else:
-            self.rnn_dim = opt_tau[2]
-            self.a = self.rnn_dim - opt_tau[1]
-            self.b = self.rnn_dim - opt_tau[0]
-            self._interval = [self.a, self.b]
-
+        self.interval = interval
+        self._interval = [0, np.inf] if self.interval is None else self.interval
+        self.rnn_dim = 1 if not self.interval else self.interval[-1]
+        self.steps = 1 if not self.interval else self.interval[-1] - self.interval[0] + 1
         self.operation = None
 
 
@@ -123,22 +115,14 @@ class Temporal_Operator(STL_Formula):
         if self.operation is None:
             raise Exception()
 
-        if self.opt_tau is None:
-            if self.interval is None:   
-                input_ = torch.cat([h0, x], dim=1)                          # [batch_size, rnn_dim+1, x_dim]
-                output = state = self.operation(input_, scale, dim=1)       # [batch_size, 1, x_dim]
-            else:
-                h0x = torch.cat([h0, x], dim=1)                             # [batch_size, rnn_dim+1, x_dim]
-                input_ = h0x[:,:self.steps,:]                               # [batch_size, self.steps, x_dim]
-                output = self.operation(input_, scale, dim=1)               # [batch_size, 1, x_dim]
-                state = h0x[:,1:,:]                                         # [batch_size, rnn_dim, x_dim]
+        if self.interval is None:   
+            input_ = torch.cat([h0, x], dim=1)                          # [batch_size, rnn_dim+1, x_dim]
+            output = state = self.operation(input_, scale, dim=1)       # [batch_size, 1, x_dim]
         else:
-            input_ = torch.cat([h0, x], dim=1) 
-            mask = torch.arange(0, self.rnn_dim + 1, 1, dtype=torch.float32)
-            mask = bump(mask, torch.relu(self.a), torch.relu(self.b), 20).reshape([1, self.rnn_dim + 1, 1])
-            out = bump_transform(self.oper, input_, mask, scale=5, large_num=large_num)
-            output = self.operation(out, scale)
-            state = input_[:,1:,:]  
+            h0x = torch.cat([h0, x], dim=1)                             # [batch_size, rnn_dim+1, x_dim]
+            input_ = h0x[:,:self.steps,:]                               # [batch_size, self.steps, x_dim]
+            output = self.operation(input_, scale, dim=1)               # [batch_size, 1, x_dim]
+            state = h0x[:,1:,:]                                         # [batch_size, rnn_dim, x_dim] 
 
 
         return output, state
@@ -173,8 +157,8 @@ class Temporal_Operator(STL_Formula):
 
 
 class Always(Temporal_Operator):
-    def __init__(self, interval=None, subformula='Always input', opt_tau=None):
-        super(Always, self).__init__(subformula, interval, opt_tau)
+    def __init__(self, subformula='Always input', interval=None):
+        super(Always, self).__init__(subformula=subformula, interval=interval)
         self.operation = Minish()
         self.oper = "min"
 
@@ -191,8 +175,8 @@ class Always(Temporal_Operator):
         return "◻ " + str(self._interval) + "( " + str(self.subformula) + " )"
 
 class Eventually(Temporal_Operator):
-    def __init__(self, interval=None, subformula='Eventually input', opt_tau=None):
-        super(Eventually, self).__init__(subformula, interval, opt_tau)
+    def __init__(self, subformula='Eventually input', interval=None):
+        super(Eventually, self).__init__(subformula=subformula, interval=interval)
         self.operation = Maxish()
         self.oper = "max"
 
