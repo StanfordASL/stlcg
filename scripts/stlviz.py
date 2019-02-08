@@ -103,3 +103,7 @@ def resize_graph(dot, size_per_element=0.15, min_size=12):
     size = max(min_size, content_size)
     size_str = str(size) + "," + str(size)
     dot.graph_attr.update(size=size_str)
+
+
+def save_graph(dot, filename, format='pdf', cleanup=True):
+    dot.render(filename=filename, format=format, cleanup=cleanup)
