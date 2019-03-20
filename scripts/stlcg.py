@@ -115,14 +115,14 @@ class Temporal_Operator(STL_Formula):
         if self.operation is None:
             raise Exception()
 
-        if self.interval is None:   
+        if self.interval is None:
             input_ = torch.cat([h0, x], dim=1)                          # [batch_size, rnn_dim+1, x_dim]
             output = state = self.operation(input_, scale, dim=1)       # [batch_size, 1, x_dim]
         else:
             h0x = torch.cat([h0, x], dim=1)                             # [batch_size, rnn_dim+1, x_dim]
             input_ = h0x[:,:self.steps,:]                               # [batch_size, self.steps, x_dim]
             output = self.operation(input_, scale, dim=1)               # [batch_size, 1, x_dim]
-            state = h0x[:,1:,:]                                         # [batch_size, rnn_dim, x_dim] 
+            state = h0x[:,1:,:]                                         # [batch_size, rnn_dim, x_dim]
 
 
         return output, state
@@ -191,7 +191,7 @@ class Eventually(Temporal_Operator):
 
     def __str__(self):
         return "♢ " + str(self._interval) + "( " + str(self.subformula) + " )"
-        
+
 class LessThan(STL_Formula):
     '''
     s <= c where s is the signal, and c is the constant.
@@ -217,8 +217,8 @@ class LessThan(STL_Formula):
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
-        return [self.name, self.c]  
-    
+        return [self.name, self.c]
+
     def forward(self, x, scale=1):
         return self.robustness_trace(x, scale)
 
@@ -284,7 +284,7 @@ class Equal(STL_Formula):
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
-        return [self.name, self.c] 
+        return [self.name, self.c]
 
     def forward(self, x, scale=1):
         return self.robustness_trace(x, scale)
@@ -302,7 +302,7 @@ class Negation(STL_Formula):
 
     def robustness_trace(self, x, scale=1):
         if scale == 1:
-            return -x 
+            return -x
         return -x*scale
 
     def robustness(self, x, time=-1, scale=1):
@@ -343,7 +343,7 @@ class And(STL_Formula):
         trace1 and trace2 are size [batch_size, time_dim, x_dim]
         '''
         return self.robustness_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
-    
+
     def eval_trace(self, trace1, trace2, scale=0):
         '''
         trace1 and trace2 are size [batch_size, time_dim, x_dim]
@@ -386,7 +386,7 @@ class Or(STL_Formula):
         trace1 and trace2 are size [batch_size, time_dim, x_dim]
         '''
         return self.robustness_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
-    
+
     def eval_trace(self, trace1, trace2, scale=0):
         '''
         trace1 and trace2 are size [batch_size, time_dim, x_dim]
@@ -402,7 +402,7 @@ class Or(STL_Formula):
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
-        return [self.subformula1, self.subformula2] 
+        return [self.subformula1, self.subformula2]
 
     def forward(self, trace1, trace2, scale=0):
         return self.robustness_trace(trace1, trace2, scale)
@@ -416,7 +416,7 @@ class Until(STL_Formula):
         super(Until, self).__init__()
         self.subformula1 = subformula1
         self.subformula2 = subformula2
-    
+
     def robustness_trace(self, trace1, trace2, scale=0):
         '''
         trace1 is the robustness trace of ϕ
@@ -426,7 +426,7 @@ class Until(STL_Formula):
         Alw = Always()
         minish = Minish()
         maxish = Maxish()
-        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]])                                  # [batch_size, time_dim, x_dim, time_dim]
+        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)                                  # [batch_size, time_dim, x_dim, time_dim]
         RHS = torch.ones(LHS.shape)*-1000000                                                    # [batch_size, time_dim, x_dim, time_dim]
         for i in range(trace2.shape[1]):
             RHS[:,i:,:,i] = Alw(trace1[:,i:,:])
@@ -454,7 +454,7 @@ class Until(STL_Formula):
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
-        return [self.subformula1, self.subformula2] 
+        return [self.subformula1, self.subformula2]
 
     def forward(self, trace1, trace2, scale=0):
         return self.robustness_trace(trace1, trace2, scale)
@@ -467,7 +467,7 @@ class Then(STL_Formula):
         super(Then, self).__init__()
         self.subformula1 = subformula1
         self.subformula2 = subformula2
-    
+
     def robustness_trace(self, trace1, trace2, scale=0):
         '''
         trace1 is the robustness trace of ϕ
@@ -477,7 +477,7 @@ class Then(STL_Formula):
         Ev = Eventually()
         minish = Minish()
         maxish = Maxish()
-        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]])                                  # [batch_size, time_dim, x_dim, time_dim]
+        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)                                  # [batch_size, time_dim, x_dim, time_dim]
         RHS = torch.ones(LHS.shape)*-1000000                                                    # [batch_size, time_dim, x_dim, time_dim]
         for i in range(trace2.shape[1]):
             RHS[:,i:,:,i] = Ev(trace1[:,i:,:])
@@ -505,7 +505,7 @@ class Then(STL_Formula):
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
-        return [self.subformula1, self.subformula2] 
+        return [self.subformula1, self.subformula2]
 
     def forward(self, trace1, trace2, scale=0):
         return self.robustness_trace(trace1, trace2, scale)
@@ -521,10 +521,10 @@ class Then(STL_Formula):
 #         self.outer = outer
 #     def __str__(self):
 #         return str(self.outer) + " ( " + str(self.inner) + " ) "
-    
+
 #     def setup(self, x, y=None, scale=5):
 #         return self.inner(x, y, scale=5)
-    
+
 #     def forward(self, x, y=None, dim=1, scale=5, cuda=False):
 #         if self.outer.interval is not None:
 #             if dim == 0:
