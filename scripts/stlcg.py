@@ -1,6 +1,6 @@
+# -*- coding: utf-8 -*-
 import torch
 import numpy as np
-from abc import ABC, abstractmethod
 from scripts.util import *
 import IPython
 # Assume inputs are already reversed.
