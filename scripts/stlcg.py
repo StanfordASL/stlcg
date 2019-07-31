@@ -88,6 +88,14 @@ class STL_Formula(torch.nn.Module):
     def __str__(self):
         raise NotImplementedError("__str__ not yet implemented")
 
+    def __and__(phi, psi):
+        return And(phi, psi)
+
+    def __or__(phi, psi):
+        return Or(phi, psi)
+        
+    def __invert__(phi):
+        return Negation(phi)
 
 class Temporal_Operator(STL_Formula):
     def __init__(self, subformula="Temporal input", interval=None):
@@ -194,7 +202,7 @@ class Eventually(Temporal_Operator):
 
 class LessThan(STL_Formula):
     '''
-    s <= c where s is the signal, and c is the constant.
+    x <= c where x is the signal, and c is the constant.
     '''
     def __init__(self, name='x', c='c'):
         super(LessThan, self).__init__()
@@ -228,7 +236,7 @@ class LessThan(STL_Formula):
 
 class GreaterThan(STL_Formula):
     '''
-    s >= c where s is the signal, and c is the constant.
+    x >= c where x is the signal, and c is the constant.
     '''
     def __init__(self, name='x', c='c'):
         super(GreaterThan, self).__init__()
