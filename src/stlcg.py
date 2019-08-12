@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch
 import numpy as np
-from scripts.util import *
+from src.util import *
 import IPython
 # Assume inputs are already reversed.
 
@@ -93,7 +93,7 @@ class STL_Formula(torch.nn.Module):
 
     def __or__(phi, psi):
         return Or(phi, psi)
-        
+
     def __invert__(phi):
         return Negation(phi)
 
