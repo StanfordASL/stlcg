@@ -5,9 +5,10 @@ from src.util import *
 import IPython
 # Assume inputs are already reversed.
 
-# Nikos TODO:
+# TODO:
 # - Edit the "forward" methods to account for the possibility that they are receiving an input of type Expression
 # - Run tests to ensure that "Expression" correctly overrides operators
+# - Make a test for each temporal operator, and make sure that they all produce the expected output for at least one example trace
 # - Implement log-barrier
 
 LARGE_NUMBER = 1E4
@@ -178,7 +179,7 @@ class Temporal_Operator(STL_Formula):
         return [self.subformula]
 
     def forward(self, x, scale=0):
-        if isintance(x, Expression):
+        if isinstance(x, Expression):
             return self.robustness_trace(x.value, scale)
         else:    
             return self.robustness_trace(x, scale)
@@ -285,7 +286,7 @@ class GreaterThan(STL_Formula):
         return [self.name, self.c]
 
     def forward(self, x, scale=1):
-        if isinstance(x, expression):
+        if isinstance(x, Expression):
             return self.robustness_trace(x.value, scale)
         else:
             return self.robustness_trace(x, scale)
@@ -356,7 +357,10 @@ class Negation(STL_Formula):
         return [self.subformula]
 
     def forward(self, x, scale=1):
-        return self.robustness_trace(x, scale)
+        if isinstance(x, Expression):
+            return self.robustness_trace(x.value, scale)
+        else:
+            return self.robustness_trace(x, scale)
 
     def __str__(self):
         return "¬(" + str(self.subformula) + ")"
@@ -399,7 +403,14 @@ class And(STL_Formula):
         return [self.subformula1, self.subformula2]
 
     def forward(self, trace1, trace2, scale=0):
-        return self.robustness_trace(trace1, trace2, scale)
+        if isinstance(trace1, Expression) and isinstance(trace2, Expression):
+            return self.robustness_trace(trace1.value, trace2.value, scale)
+        elif isinstance(trace1, Expression):
+            return self.robustness_trace(trace1.value, trace2, scale)
+        elif isinstance(trace2, Expression):
+            return self.robustness_trace(trace1, trace2.value, scale)
+        else:
+            return self.robustness_trace(trace1, trace2, scale)
 
     def __str__(self):
         return "(" + str(self.subformula1) + ") ∧ (" + str(self.subformula2) + ")"
@@ -442,7 +453,14 @@ class Or(STL_Formula):
         return [self.subformula1, self.subformula2]
 
     def forward(self, trace1, trace2, scale=0):
-        return self.robustness_trace(trace1, trace2, scale)
+        if isinstance(trace1, Expression) and isinstance(trace2, Expression):
+            return self.robustness_trace(trace1.value, trace2.value, scale)
+        elif isinstance(trace1, Expression):
+            return self.robustness_trace(trace1.value, trace2, scale)
+        elif isinstance(trace2, Expression):
+            return self.robustness_trace(trace1, trace2.value, scale)
+        else:
+            return self.robustness_trace(trace1, trace2, scale)
 
     def __str__(self):
         return "(" + str(self.subformula1) + ") ∨ (" + str(self.subformula2) + ")"
@@ -494,7 +512,14 @@ class Until(STL_Formula):
         return [self.subformula1, self.subformula2]
 
     def forward(self, trace1, trace2, scale=0):
-        return self.robustness_trace(trace1, trace2, scale)
+        if isinstance(trace1, Expression) and isinstance(trace2, Expression):
+            return self.robustness_trace(trace1.value, trace2.value, scale)
+        elif isinstance(trace1, Expression):
+            return self.robustness_trace(trace1.value, trace2, scale)
+        elif isinstance(trace2, Expression):
+            return self.robustness_trace(trace1, trace2.value, scale)
+        else:
+            return self.robustness_trace(trace1, trace2, scale)
 
     def __str__(self):
         return  "(" + str(self.subformula1) + ")" + " U " + "(" + str(self.subformula2) + ")"
@@ -545,7 +570,14 @@ class Then(STL_Formula):
         return [self.subformula1, self.subformula2]
 
     def forward(self, trace1, trace2, scale=0):
-        return self.robustness_trace(trace1, trace2, scale)
+        if isinstance(trace1, Expression) and isinstance(trace2, Expression):
+            return self.robustness_trace(trace1.value, trace2.value, scale)
+        elif isinstance(trace1, Expression):
+            return self.robustness_trace(trace1.value, trace2, scale)
+        elif isinstance(trace2, Expression):
+            return self.robustness_trace(trace1, trace2.value, scale)
+        else:
+            return self.robustness_trace(trace1, trace2, scale)
 
     def __str__(self):
         return  "(" + str(self.subformula1) + ")" + " T " + "(" + str(self.subformula2) + ")"
@@ -607,7 +639,7 @@ class Expression(torch.nn.Module):
     def __lt__(lhs, rhs):
         if isinstance(lhs, Expression) and isinstance(rhs, Expression):
             return LessThan(lhs.value, rhs.value) 
-        elif (not isinstance(lhs, Expression)) and (not isintance(rhs, Expression)):
+        elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
             # This case cannot occur. If neither is an Expression, why are you calling this method?
             raise Exception('What are you doing?')
         elif not isinstance(rhs, Expression):
@@ -621,7 +653,7 @@ class Expression(torch.nn.Module):
     def __gt__(lhs, rhs):
         if isinstance(lhs, Expression) and isinstance(rhs, Expression):
             return GreaterThan(lhs.value, rhs.value) 
-        elif (not isinstance(lhs, Expression)) and (not isintance(rhs, Expression)):
+        elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
             # This case cannot occur. If neither is an Expression, why are you calling this method?
             raise Exception('What are you doing?')
         elif not isinstance(rhs, Expression):
@@ -635,7 +667,7 @@ class Expression(torch.nn.Module):
     def __eq__(lhs, rhs):
         if isinstance(lhs, Expression) and isinstance(rhs, Expression):
             return Equal(lhs.value, rhs.value)
-        elif (not isinstance(lhs, Expression)) and (not isintance(rhs, Expression)):
+        elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
             # This case cannot occur. If neither is an Expression, why are you calling this method?
             raise Exception('What are you doing?')
         elif not isinstance(rhs, Expression):
