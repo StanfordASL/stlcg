@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch
 import numpy as np
-from src.util import *
+from util import *
 import IPython
 # Assume inputs are already reversed.
 
