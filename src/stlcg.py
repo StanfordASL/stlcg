@@ -3,8 +3,14 @@ import torch
 import numpy as np
 from util import *
 import IPython
-# Assume inputs are already reversed.
 
+'''
+Important information:
+- Assume inputs are already reversed.
+- "pscale" stands for "predicate scale" (not the scale used in maxish and minish)
+- "time" variable when computing robustness: time=0 means the current time, t=1 means next time step. The reversal of the trace is accounted for inside the function, the user does not need to worry about this
+- must specify subformula
+'''
 # TODO:
 # - Edit the "forward" methods to account for the possibility that they are receiving an input of type Expression
 # - Run tests to ensure that "Expression" correctly overrides operators
@@ -13,27 +19,28 @@ import IPython
 
 LARGE_NUMBER = 1E4
 
+
 class Maxish(torch.nn.Module):
     def __init__(self, name="Maxish input"):
         super(Maxish, self).__init__()
         self.input_name = name
 
-    def forward(self, x, scale, dim=1):
+    def forward(self, x, scale, dim=1, keepdim=True):
         '''
         The default is
-         x is of size [batch_size, max_dim, x_dim]
+         x is of size [batch_size, N, ...] where N is typically the trace length
          if scale <= 0, then the true max is used, otherwise, the softmax is used.
         '''
         if isinstance(x, Expression): 
             if scale > 0:
-                return (torch.softmax(x.value*scale, dim=dim)*x.value).sum(dim, keepdim=True)
+                return (torch.softmax(x.value*scale, dim=dim)*x.value).sum(dim, keepdim=keepdim)
             else:
-                return x.value.max(dim, keepdim=True)[0]
+                return x.value.max(dim, keepdim=keepdim)[0]
         else:
             if scale > 0:
-                return (torch.softmax(x*scale, dim=dim)*x).sum(dim, keepdim=True)
+                return (torch.softmax(x*scale, dim=dim)*x).sum(dim, keepdim=keepdim)
             else:
-                return x.max(dim, keepdim=True)[0]
+                return x.max(dim, keepdim=keepdim)[0]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
@@ -44,22 +51,22 @@ class Minish(torch.nn.Module):
         super(Minish, self).__init__()
         self.input_name = name
 
-    def forward(self, x, scale, dim=1):
+    def forward(self, x, scale, dim=1, keepdim=True):
         '''
         The default is
-         x is of size [batch_size, max_dim, ...]
+         x is of size [batch_size, N, ...] where N is typically the trace length
          if scale <= 0, then the true min is used, otherwise, the softmin is used.
         '''
         if isinstance(x, Expression):
             if scale > 0:
-                return (torch.softmax(-x.value*scale, dim=dim)*x.value).sum(dim, keepdim=True)
+                return (torch.softmax(-x.value*scale, dim=dim)*x.value).sum(dim, keepdim=keepdim)
             else:
-                return x.value.min(dim, keepdim=True)[0]
+                return x.value.min(dim, keepdim=keepdim)[0]
         else:
             if scale > 0:
-                return (torch.softmax(-x*scale, dim=dim)*x).sum(dim, keepdim=True)
+                return (torch.softmax(-x*scale, dim=dim)*x).sum(dim, keepdim=keepdim)
             else:
-                return x.min(dim, keepdim=True)[0]
+                return x.min(dim, keepdim=keepdim)[0]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
@@ -70,38 +77,46 @@ class STL_Formula(torch.nn.Module):
     def __init__(self):
         super(STL_Formula, self).__init__()
 
-    def eval_trace(self, trace, scale):
+    def robustness_trace(self, trace, pscale=1, scale=-1, **kwargs):
+        '''
+        Trace should have size [batch_size, time_dim, ...]
+        The output robustness_trace has size [batch_size, time_dim, ...]
+        The values in eval_trace are real numbers
+        '''
+        raise NotImplementedError("robustness_trace not yet implemented")
+
+    def robustness(self, inputs, time=0, pscale=1, scale=-1, **kwargs):
+        '''
+        Trace should have size [batch_size, time_dim, x_dim]
+        Extracts the robustness_trace value at the given time. (Default: time=0 assuming reverse trace)
+        '''
+        return self.robustness_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)
+
+    def eval_trace(self, inputs, pscale=1, scale=-1, **kwargs):
         '''
         Trace should have size [batch_size, time_dim, x_dim]
         The output eval_trace has size [batch_size, time_dim, x_dim]
         The values in eval_trace are 0 or 1 (False or True)
         '''
-        raise NotImplementedError("eval_trace not yet implemented")
+        return self.robustness_trace(inputs, pscale=pscale, scale=scale) > 0
 
-    def robustness_trace(self, trace, scale):
-        '''
-        Trace should have size [batch_size, time_dim, x_dim]
-        The output robustness_trace has size [batch_size, time_dim, x_dim]
-        The values in eval_trace are real numbers
-        '''
-        raise NotImplementedError("robustness_trace not yet implemented")
-
-    def eval(self, trace, scale=0, time=-1):
+    def eval(self, inputs, time=0, pscale=1, scale=-1, **kwargs):
         '''
         Trace should have size [batch_size, time_dim, x_dim]
         Extracts the eval_trace value at the given time. (Default: time=0)
         '''
-        return self.eval_trace(trace, scale)[:,time,:].unsqueeze(1)
+        return self.eval_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)                 # [batch_size, time_dim, x_dim]
 
-    def robustness(self, trace, scale=0, time=-1):
-        '''
-        Trace should have size [batch_size, time_dim, x_dim]
-        Extracts the robustness_trace value at the given time. (Default: time=0)
-        '''
-        return self.robustness_trace(trace, scale)[:,time,:].unsqueeze(1)
-
-    def forward(self):
-        raise NotImplementedError("forward not yet implemented")
+    def forward(self, inputs, pscale=1, scale=-1, **kwargs):
+        return self.robustness_trace(inputs, pscale=pscale, scale=scale)
+        # if isinstance(trace1, Expression) and isinstance(trace2, Expression):
+        #     return self.robustness_trace(trace1.value, trace2.value, scale)
+        # elif isinstance(trace1, Expression):
+        #     return self.robustness_trace(trace1.value, trace2, scale)
+        # elif isinstance(trace2, Expression):
+        #     return self.robustness_trace(trace1, trace2.value, scale)
+        # else:
+        #     return self.robustness_trace(trace1, trace2, scale)
 
     def __str__(self):
         raise NotImplementedError("__str__ not yet implemented")
@@ -115,28 +130,60 @@ class STL_Formula(torch.nn.Module):
     def __invert__(phi):
         return Negation(phi)
 
+class Identity(STL_Formula):
+
+    def __init__(self, name='x'):
+        super(Identity, self).__init__()
+
+    def robustness_trace(self, trace, pscale=1, **kwargs):
+        return trace * pscale 
+
+    def robustness(self, trace, time=0, pscale=1, **kwargs):
+        return self.robustness_trace(trace, pscale)[:,-(time+1),:].unsqueeze(1)
+
+    def eval_trace(self, trace, pscale=1, **kwargs):
+        return self.robustness_trace(trace, pscale) > 0
+
+    def eval(self, trace, time=0, pscale=1, **kwargs):
+        return self.eval_trace(trace, pscale)[:,-(time+1),:].unsqueeze(1)
+
+    def _next_function(self):
+        return []
+
+    def forward(self, trace, pscale=1, **kwargs):
+        if isinstance(trace, Expression):
+            return self.robustness_trace(trace.value, pscale)
+        else:    
+            return self.robustness_trace(trace, pscale)
+
+    def __str__(self):
+        return "%s" %self.name
+
+
+
+
 class Temporal_Operator(STL_Formula):
-    def __init__(self, subformula="Temporal input", interval=None):
+    def __init__(self, subformula, interval=None):
         super(Temporal_Operator, self).__init__()
         self.subformula = subformula
         self.interval = interval
         self._interval = [0, np.inf] if self.interval is None else self.interval
-        self.rnn_dim = 1 if not self.interval else self.interval[-1]
-        self.steps = 1 if not self.interval else self.interval[-1] - self.interval[0] + 1
+        self.rnn_dim = 1 if not self.interval else self.interval[-1]    # rnn_dim=1 if interval is [0, ∞) otherwise rnn_dim=end of interval
+        self.steps = 1 if not self.interval else self.interval[-1] - self.interval[0] + 1   # steps=1 if interval is [0, ∞) otherwise steps=length of interval
         self.operation = None
 
 
     def _initialize_rnn_cell(self, x):
         '''
-        x is [batch_size, time_dim, x_dim]
-        initial rnn state is [batch_size, rnn_dim, x_dim]
+        x is [batch_size, time_dim, ...]
+        initial rnn state is [batch_size, rnn_dim, ...]
         '''
         raise NotImplementedError("_initialize_rnn_cell is not implemented")
 
-    def _rnn_cell(self, x, h0, scale, large_num=1E4):
+    def _rnn_cell(self, x, h0, scale=-1, **kwargs):
         '''
-        x is [batch_size, 1, x_dim]
-        h0 is [batch_size, rnn_dim, x_dim]
+        x: rnn input [batch_size, 1, ...]
+        h0: input rnn hidden state  [batch_size, rnn_dim, ...]
         '''
         if self.operation is None:
             raise Exception()
@@ -149,11 +196,9 @@ class Temporal_Operator(STL_Formula):
             input_ = h0x[:,:self.steps,:]                               # [batch_size, self.steps, x_dim]
             output = self.operation(input_, scale, dim=1)               # [batch_size, 1, x_dim]
             state = h0x[:,1:,:]                                         # [batch_size, rnn_dim, x_dim]
-
-
         return output, state
 
-    def _run_cell(self, x, scale):
+    def _run_rnn_cell(self, x, scale):
         outputs = []
         states = []
         h = self._initialize_rnn_cell(x)                                # [batch_size, rnn_dim, x_dim]
@@ -166,27 +211,27 @@ class Temporal_Operator(STL_Formula):
 
         return outputs, states
 
-    def robustness_trace(self, x, scale=0):
-        outputs, states = self._run_cell(x, scale)
-        return torch.cat(outputs, dim=1)                              # [batch_size, time_dim, x_dim]
+    def robustness_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+        trace = self.subformula(inputs, pscale=pscale, scale=scale)
+        outputs, states = self._run_rnn_cell(trace, scale=scale)
+        return torch.cat(outputs, dim=1)                              # [batch_size, time_dim, ...]
 
-    def eval_trace(self, x, scale=0):
-        outputs, states = self._run_cell(x, scale)
-        return torch.cat(outputs, dim=1) > 0                          # [batch_size, time_dim, x_dim]
+    # def eval_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+    #     return robustness_trace(inputs, pscale=pscale, scale=scale) > 0                          # [batch_size, time_dim, ...]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.subformula]
 
-    def forward(self, x, scale=0):
-        if isinstance(x, Expression):
-            return self.robustness_trace(x.value, scale)
+    def forward(self, inputs, pscale=1, scale=-1, **kwargs):
+        if isinstance(inputs, Expression):
+            return self.robustness_trace(inputs.value, scale)
         else:    
-            return self.robustness_trace(x, scale)
+            return self.robustness_trace(inputs, pscale=pscale, scale=scale)
 
 
 class Always(Temporal_Operator):
-    def __init__(self, subformula='Always input', interval=None):
+    def __init__(self, subformula, interval=None):
         super(Always, self).__init__(subformula=subformula, interval=interval)
         self.operation = Minish()
         self.oper = "min"
@@ -225,242 +270,236 @@ class LessThan(STL_Formula):
     '''
     x <= c where x is the signal, and c is the constant.
     '''
-    def __init__(self, name='x', c='c'):
+    def __init__(self, name='x', val='c'):
         super(LessThan, self).__init__()
         self.name = name
-        self.c = c
+        self.val = val
+        self.subformula = None
 
-    def robustness_trace(self, x, scale=1):
-        if scale == 1:
-            return self.c - x
-        return (self.c - x)*scale
+    def robustness_trace(self, trace, pscale=1, **kwargs):
+        if pscale == 1:
+            return self.val - trace
+        return (self.val - trace)*pscale
 
-    def robustness(self, x, time=-1, scale=1):
-        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
+    # def robustness(self, trace, time=0, pscale=1, **kwargs):
+    #     return self.robustness_trace(trace, pscale)[:,-(time+1),:].unsqueeze(1)
 
-    def eval_trace(self, x, scale=1):
-        return self.robustness_trace(x, scale) > 0
+    # def eval_trace(self, trace, pscale=1, **kwargs):
+    #     return self.robustness_trace(trace, pscale) > 0
 
-    def eval(self, x, time=-1, scale=1):
-        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
+    # def eval(self, trace, time=0, pscale=1, **kwargs):
+    #     return self.eval_trace(trace, pscale)[:,-(time+1),:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
-        return [self.name, self.c]
+        return [self.name, self.val]
 
-    def forward(self, x, scale=1):
-        if isinstance(x, Expression):
-            return self.robustness_trace(x.value, scale)
-        else:    
-            return self.robustness_trace(x, scale)
+    # def forward(self, trace, pscale=1, **kwargs):
+    #     if isinstance(trace, Expression):
+    #         return self.robustness_trace(trace.value, pscale)
+    #     else:    
+    #         return self.robustness_trace(trace, pscale)
 
     def __str__(self):
-        return self.name + " <= " + tensor_to_str(self.c)
+        return self.name + " <= " + tensor_to_str(self.val)
 
 
 class GreaterThan(STL_Formula):
     '''
     x >= c where x is the signal, and c is the constant.
     '''
-    def __init__(self, name='x', c='c'):
+    def __init__(self, name='x', val='c'):
         super(GreaterThan, self).__init__()
         self.name = name
-        self.c = c
+        self.val = val
+        self.subformula = None
 
-    def robustness_trace(self, x, scale=1):
-        if scale == 1:
-            return x - self.c
-        return (x - self.c)*scale
+    def robustness_trace(self, trace, pscale=1, **kwargs):
+        if pscale == 1:
+            return trace - self.val
+        return (trace - self.val)*pscale
 
-    def robustness(self, x, time=-1, scale=1):
-        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
+    # def robustness(self, trace, time=0, pscale=1, **kwargs):
+    #     return self.robustness_trace(trace, pscale)[:,-(time+1),:].unsqueeze(1)
 
-    def eval_trace(self, x, scale=1):
-        return self.robustness_trace(x, scale) > 0
+    # def eval_trace(self, trace, pscale=1, **kwargs):
+    #     return self.robustness_trace(trace, pscale) > 0
 
-    def eval(self, x, time=-1, scale=1):
-        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
+    # def eval(self, trace, time=0, pscale=1, **kwargs):
+    #     return self.eval_trace(trace, pscale)[:,-(time+1),:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
-        return [self.name, self.c]
+        return [self.name, self.val]
 
-    def forward(self, x, scale=1):
-        if isinstance(x, Expression):
-            return self.robustness_trace(x.value, scale)
-        else:
-            return self.robustness_trace(x, scale)
+    # def forward(self, trace, pscale=1, **kwargs):
+    #     if isinstance(trace, Expression):
+    #         return self.robustness_trace(trace.value, pscale)
+    #     else:
+    #         return self.robustness_trace(trace, pscale)
 
     def __str__(self):
-        return self.name + " >= " + tensor_to_str(self.c)
+        return self.name + " >= " + tensor_to_str(self.val)
 
 class Equal(STL_Formula):
     '''
     s = c where s is the signal, and c is the constant.
     '''
-    def __init__(self, name='x', c='c'):
+    def __init__(self, name='x', val='c'):
         super(Equal, self).__init__()
         self.name = name
-        self.c = c
+        self.val = val
+        self.subformula = None
 
-    def robustness_trace(self, x, scale=1):
-        if scale == 1:
-            return  torch.abs(x - self.c)
-        return torch.abs(x - self.c)*scale
+    def robustness_trace(self, trace, pscale=1, **kwargs):
+        if pscale == 1:
+            return  torch.abs(trace - self.val)
+        return torch.abs(trace - self.val)*pscale
 
-    def robustness(self, x, time=-1, scale=1):
-        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
+    # def robustness(self, trace, time=0, pscale=1, **kwargs):
+    #     return self.robustness_trace(trace, pscale)[:,-(time+1),:].unsqueeze(1)
 
-    def eval_trace(self, x, scale=1):
-        return self.robustness_trace(x, scale) > 0
+    # def eval_trace(self, trace, pscale=1, **kwargs):
+    #     return self.robustness_trace(trace, pscale) > 0
 
-    def eval(self, x, time=-1, scale=1):
-        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
+    # def eval(self, trace, time=0, pscale=1, **kwargs):
+    #     return self.eval_trace(trace, pscale)[:,-(time+1),:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
-        return [self.name, self.c]
+        return [self.name, self.val]
 
-    def forward(self, x, scale=1):
-        if isinstance(x, Expression):
-            return self.robustness_trace(x.value, scale)
-        else:
-            return self.robustness_trace(x, scale)
+    # def forward(self, trace, pscale=1, **kwargs):
+    #     if isinstance(trace, Expression):
+    #         return self.robustness_trace(trace.value, pscale)
+    #     else:
+    #         return self.robustness_trace(trace, pscale)
 
     def __str__(self):
-        return self.name + " = " + tensor_to_str(self.c)
+        return self.name + " = " + tensor_to_str(self.val)
 
 class Negation(STL_Formula):
     '''
     not Subformula
     '''
-    def __init__(self, subformula='Negation input'):
+    def __init__(self, subformula):
         super(Negation, self).__init__()
         self.subformula = subformula
 
-    def robustness_trace(self, x, scale=1):
-        if scale == 1:
-            return -x
-        return -x*scale
+    def robustness_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+        return -self.subformula(inputs, pscale=pscale, scale=scale)*pscale
 
-    def robustness(self, x, time=-1, scale=1):
-        return self.robustness_trace(x, scale)[:,time,:].unsqueeze(1)
+    # def robustness(self, inputs, time=0, pscale=1, scale=-1, **kwargs):
+    #     return self.robustness_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)
 
-    def eval_trace(self, x, scale=1):
-        return -x*scale > 0
+    # def eval_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+    #     return  -self.subformula(inputs, pscale=pscale, scale=scale)*pscale > 0
 
-    def eval(self, x, time=-1, scale=1):
-        return self.eval_trace(x, scale)[:,time,:].unsqueeze(1)
+    # def eval(self, inputs, time=0, pscale=1, scale=-1, **kwargs):
+    #     return eval_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.subformula]
 
-    def forward(self, x, scale=1):
-        if isinstance(x, Expression):
-            return self.robustness_trace(x.value, scale)
-        else:
-            return self.robustness_trace(x, scale)
+    # def forward(self, inputs, pscale=1, scale=-1, **kwargs):
+    #     if isinstance(inputs, Expression):
+    #         return self.robustness_trace(inputs.value, pscale=pscale, scale=scale)
+    #     else:
+    #         return self.robustness_trace(inputs, pscale=pscale, scale=scale)
 
     def __str__(self):
         return "¬(" + str(self.subformula) + ")"
 
 class And(STL_Formula):
-    def __init__(self, subformula1="And subformula1", subformula2="And subformula2"):
+    '''
+    inputs: tuple (x,y) where x and y are the inputs to each subformula respectively. x or y can also be a tuple if the subformula requires multiple inputs (e.g, ϕ₁(x) ∧ (ϕ₂(y) ∧ ϕ₃(z) would have inputs=(x, (y,z)))    )
+    trace1 and trace2 are size [batch_size, time_dim, x_dim]
+    '''
+    def __init__(self, subformula1, subformula2):
         super(And, self).__init__()
         self.subformula1 = subformula1
         self.subformula2 = subformula2
         self.operation = Minish()
 
-    def robustness_trace(self, trace1, trace2, scale=0):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        xx = torch.stack([trace1, trace2], dim=-1)
-        return self.operation(xx, scale, dim=-1).squeeze(-1)                                         # [batch_size, time_dim, x_dim]
+    def robustness_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+        x, y = inputs
+        trace1 = self.subformula1(x, pscale=pscale, scale=scale)
+        trace2 = self.subformula2(y, pscale=pscale, scale=scale)
+        xx = torch.stack([trace1, trace2], dim=-1)      # [batch_size, time_dim, ..., 2]
+        return self.operation(xx, scale, dim=-1, keepdim=False)                                         # [batch_size, time_dim, ...]
 
-    def robustness(self, trace1, trace2, scale=0, time=-1):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.robustness_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
+    # def robustness(self, inputs, time=0, pscale=1, scale=-1):
+    #     return self.robustness_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
 
-    def eval_trace(self, trace1, trace2, scale=0):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        xx = torch.stack([trace1, trace2], dim=-1)
-        return self.operation(xx, scale, dim=-1) > 0                                                 # [batch_size, time_dim, x_dim]
+    # def eval_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+    #     return self.robustness_trace(inputs, pscale=pscale, scale=scale) > 0
 
-    def eval(self, trace1, trace2, scale=0, time=-1):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.eval_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)                 # [batch_size, time_dim, x_dim]
+    # def eval(self, inputs, time=0, pscale=1, scale=-1, **kwargs):
+    #     return self.eval_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)                 # [batch_size, time_dim, x_dim]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.subformula1, self.subformula2]
 
-    def forward(self, trace1, trace2, scale=0):
-        if isinstance(trace1, Expression) and isinstance(trace2, Expression):
-            return self.robustness_trace(trace1.value, trace2.value, scale)
-        elif isinstance(trace1, Expression):
-            return self.robustness_trace(trace1.value, trace2, scale)
-        elif isinstance(trace2, Expression):
-            return self.robustness_trace(trace1, trace2.value, scale)
-        else:
-            return self.robustness_trace(trace1, trace2, scale)
+    # def forward(self, inputs, pscale=1, scale=-1, **kwargs):
+    #     return self.robustness_trace(inputs, pscale=pscale, scale=scale)
+    #     # if isinstance(trace1, Expression) and isinstance(trace2, Expression):
+    #     #     return self.robustness_trace(trace1.value, trace2.value, scale)
+    #     # elif isinstance(trace1, Expression):
+    #     #     return self.robustness_trace(trace1.value, trace2, scale)
+    #     # elif isinstance(trace2, Expression):
+    #     #     return self.robustness_trace(trace1, trace2.value, scale)
+    #     # else:
+    #     #     return self.robustness_trace(trace1, trace2, scale)
 
     def __str__(self):
         return "(" + str(self.subformula1) + ") ∧ (" + str(self.subformula2) + ")"
 
 class Or(STL_Formula):
-    def __init__(self, subformula1="Or subformula1", subformula2="Or subformula2"):
+    '''
+    inputs: tuple (x,y) where x and y are the inputs to each subformula respectively. x or y can also be a tuple if the subformula requires multiple inputs (e.g, ϕ₁(x) ∧ (ϕ₂(y) ∧ ϕ₃(z) would have inputs=(x, (y,z)))    )
+    trace1 and trace2 are size [batch_size, time_dim, x_dim]
+    '''
+    def __init__(self, subformula1, subformula2):
         super(Or, self).__init__()
         self.subformula1 = subformula1
         self.subformula2 = subformula2
         self.operation = Maxish()
 
-    def robustness_trace(self, trace1, trace2, scale=0):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        xx = torch.stack([trace1, trace2], dim=-1)
-        return self.operation(xx, scale, dim=-1).squeeze(-1)                                         # [batch_size, time_dim, x_dim]
+    def robustness_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+        x, y = inputs
+        trace1 = self.subformula1(x, pscale=pscale, scale=scale)
+        trace2 = self.subformula2(y, pscale=pscale, scale=scale)
+        xx = torch.stack([trace1, trace2], dim=-1)      # [batch_size, time_dim, ..., 2]
+        return self.operation(xx, scale, dim=-1, keepdim=False)                                         # [batch_size, time_dim, ...]
 
-    def robustness(self, trace1, trace2, scale=0, time=-1):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.robustness_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
+    # def robustness(self, inputs, time=0, pscale=1, scale=-1):
+    #     return self.robustness_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
 
-    def eval_trace(self, trace1, trace2, scale=0):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        xx = torch.stack([trace1, trace2], dim=-1)
-        return self.operation(xx, scale, dim=-1) > 0                                                 # [batch_size, time_dim, x_dim]
+    # def eval_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+    #     return self.robustness_trace(inputs, pscale=pscale, scale=scale) > 0
 
-    def eval(self, trace1, trace2, scale=0, time=-1):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.eval_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)                 # [batch_size, time_dim, x_dim]
+    # def eval(self, inputs, time=0, pscale=1, scale=-1, **kwargs):
+    #     '''
+    #     trace1 and trace2 are size [batch_size, time_dim, x_dim]
+    #     '''
+    #     return self.eval_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)                 # [batch_size, time_dim, x_dim]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.subformula1, self.subformula2]
 
-    def forward(self, trace1, trace2, scale=0):
-        if isinstance(trace1, Expression) and isinstance(trace2, Expression):
-            return self.robustness_trace(trace1.value, trace2.value, scale)
-        elif isinstance(trace1, Expression):
-            return self.robustness_trace(trace1.value, trace2, scale)
-        elif isinstance(trace2, Expression):
-            return self.robustness_trace(trace1, trace2.value, scale)
-        else:
-            return self.robustness_trace(trace1, trace2, scale)
+    # def forward(self, inputs, pscale=1, scale=-1, **kwargs):
+    #     return self.robustness_trace(inputs, pscale=pscale, scale=scale)
+    #     # if isinstance(trace1, Expression) and isinstance(trace2, Expression):
+    #     #     return self.robustness_trace(trace1.value, trace2.value, scale)
+    #     # elif isinstance(trace1, Expression):
+    #     #     return self.robustness_trace(trace1.value, trace2, scale)
+    #     # elif isinstance(trace2, Expression):
+    #     #     return self.robustness_trace(trace1, trace2.value, scale)
+    #     # else:
+    #     #     return self.robustness_trace(trace1, trace2, scale)
 
     def __str__(self):
         return "(" + str(self.subformula1) + ") ∨ (" + str(self.subformula2) + ")"
@@ -468,116 +507,125 @@ class Or(STL_Formula):
 
 class Until(STL_Formula):
     def __init__(self, subformula1="Until subformula1", subformula2="Until subformula2"):
+        '''
+        subformula1 U subformula2
+        '''
         super(Until, self).__init__()
         self.subformula1 = subformula1
         self.subformula2 = subformula2
 
-    def robustness_trace(self, trace1, trace2, scale=0):
+    def robustness_trace(self, inputs, pscale=1, scale=-1, **kwargs):
         '''
         trace1 is the robustness trace of ϕ
         trace2 is the robustness trace of ψ
         trace1 and trace2 are size [batch_size, time_dim, x_dim]
         '''
-        Alw = Always()
+        x, y = inputs
+        trace1 = self.subformula1(x, pscale=pscale, scale=scale)
+        trace2 = self.subformula2(y, pscale=pscale, scale=scale)
+        Alw = Always(subformula=Identity(name=str(self.subformula1)))
         minish = Minish()
         maxish = Maxish()
         LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)                                  # [batch_size, time_dim, x_dim, time_dim]
-        RHS = torch.ones(LHS.shape)*-1000000                                                    # [batch_size, time_dim, x_dim, time_dim]
+        RHS = torch.ones(LHS.shape)*-LARGE_NUMBER                                                    # [batch_size, time_dim, x_dim, time_dim]
         for i in range(trace2.shape[1]):
-            RHS[:,i:,:,i] = Alw(trace1[:,i:,:])
+            RHS[:,i:,:,i] = Alw(trace1[:,i:,:], pscale=pscale, scale=scale)
         # first min over the (ρ(ψ), ◻ρ(ϕ))
         # then max over the t′ dimension (the second time_dime dimension)
         return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1).squeeze(-1), scale=scale, dim=-1).squeeze(-1)                                                              # [batch_size, time_dim, x_dim]
 
-    def robustness(self, trace1, trace2, scale=0, time=-1):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.robustness_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
+    # def robustness(self, inputs, time=0, pscale=1, scale=-1, **kwargs):
+    #     return self.robustness_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
 
-    def eval_trace(self, trace1, trace2, scale=0):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.robustness_trace(trace1, trace2, scale) > 0                               # [batch_size, time_dim, x_dim]
+    # def eval_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+    #     '''
+    #     trace1 and trace2 are size [batch_size, time_dim, x_dim]
+    #     '''
+    #     return self.robustness_trace(inputs, pscale=pscale, scale=scale) > 0                               # [batch_size, time_dim, x_dim]
 
-    def eval(self, trace1, trace2, scale=0, time=-1):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.robustness(trace1, trace2, scale, time) > 0                               # [batch_size, time_dim, x_dim]
+    # def eval(self, inputs, time=0, pscale=1, scale=-1, **kwargs):
+    #     '''
+    #     trace1 and trace2 are size [batch_size, time_dim, x_dim]
+    #     '''
+    #     return self.eval_trace(inputs, pscale=pscale, scale=scale)[:,-(time+1),:].unsqueeze(1)                        # [batch_size, time_dim, x_dim]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.subformula1, self.subformula2]
 
-    def forward(self, trace1, trace2, scale=0):
-        if isinstance(trace1, Expression) and isinstance(trace2, Expression):
-            return self.robustness_trace(trace1.value, trace2.value, scale)
-        elif isinstance(trace1, Expression):
-            return self.robustness_trace(trace1.value, trace2, scale)
-        elif isinstance(trace2, Expression):
-            return self.robustness_trace(trace1, trace2.value, scale)
-        else:
-            return self.robustness_trace(trace1, trace2, scale)
+    # def forward(self, trace1, trace2, scale=0):
+    #     if isinstance(trace1, Expression) and isinstance(trace2, Expression):
+    #         return self.robustness_trace(trace1.value, trace2.value, scale)
+    #     elif isinstance(trace1, Expression):
+    #         return self.robustness_trace(trace1.value, trace2, scale)
+    #     elif isinstance(trace2, Expression):
+    #         return self.robustness_trace(trace1, trace2.value, scale)
+    #     else:
+    #         return self.robustness_trace(trace1, trace2, scale)
 
     def __str__(self):
         return  "(" + str(self.subformula1) + ")" + " U " + "(" + str(self.subformula2) + ")"
 
 class Then(STL_Formula):
-    def __init__(self, subformula1="Then subformula1", subformula2="Then subformula2"):
+    '''
+    subformula1 T subformula2
+    '''
+    def __init__(self, subformula1, subformula2):
         super(Then, self).__init__()
         self.subformula1 = subformula1
         self.subformula2 = subformula2
 
-    def robustness_trace(self, trace1, trace2, scale=0):
+    def robustness_trace(self, inputs, pscale=1, scale=-1, **kwargs):
         '''
         trace1 is the robustness trace of ϕ
         trace2 is the robustness trace of ψ
         trace1 and trace2 are size [batch_size, time_dim, x_dim]
         '''
-        Ev = Eventually()
+        x, y = inputs
+        trace1 = self.subformula1(x, pscale=pscale, scale=scale)
+        trace2 = self.subformula2(y, pscale=pscale, scale=scale)
+        Ev = Eventually(subformula=Identity(name=str(self.subformula1)))
         minish = Minish()
         maxish = Maxish()
         LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)                                  # [batch_size, time_dim, x_dim, time_dim]
-        RHS = torch.ones(LHS.shape)*-1000000                                                    # [batch_size, time_dim, x_dim, time_dim]
+        RHS = torch.ones(LHS.shape)*-LARGE_NUMBER                                                 # [batch_size, time_dim, x_dim, time_dim]
         for i in range(trace2.shape[1]):
-            RHS[:,i:,:,i] = Ev(trace1[:,i:,:])
+            RHS[:,i:,:,i] = Ev(trace1[:,i:,:], pscale=pscale, scale=scale)
         # first min over the (ρ(ψ), ◻ρ(ϕ))
         # then max over the t′ dimension (the second time_dime dimension)
         return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1).squeeze(-1), scale=scale, dim=-1).squeeze(-1)                                                              # [batch_size, time_dim, x_dim]
 
-    def robustness(self, trace1, trace2, scale=0, time=-1):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.robustness_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
+    # def robustness(self, trace1, trace2, scale=0, time=-1):
+    #     '''
+    #     trace1 and trace2 are size [batch_size, time_dim, x_dim]
+    #     '''
+    #     return self.robustness_trace(trace1, trace2, scale)[:,time,:].unsqueeze(1)           # [batch_size, time_dim, x_dim]
 
-    def eval_trace(self, trace1, trace2, scale=0):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.robustness_trace(trace1, trace2, scale) > 0                               # [batch_size, time_dim, x_dim]
+    # def eval_trace(self, trace1, trace2, scale=0):
+    #     '''
+    #     trace1 and trace2 are size [batch_size, time_dim, x_dim]
+    #     '''
+    #     return self.robustness_trace(trace1, trace2, scale) > 0                               # [batch_size, time_dim, x_dim]
 
-    def eval(self, trace1, trace2, scale=0, time=-1):
-        '''
-        trace1 and trace2 are size [batch_size, time_dim, x_dim]
-        '''
-        return self.robustness(trace1, trace2, scale, time) > 0                               # [batch_size, time_dim, x_dim]
+    # def eval(self, trace1, trace2, scale=0, time=-1):
+    #     '''
+    #     trace1 and trace2 are size [batch_size, time_dim, x_dim]
+    #     '''
+    #     return self.robustness(trace1, trace2, scale, time) > 0                               # [batch_size, time_dim, x_dim]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
         return [self.subformula1, self.subformula2]
 
-    def forward(self, trace1, trace2, scale=0):
-        if isinstance(trace1, Expression) and isinstance(trace2, Expression):
-            return self.robustness_trace(trace1.value, trace2.value, scale)
-        elif isinstance(trace1, Expression):
-            return self.robustness_trace(trace1.value, trace2, scale)
-        elif isinstance(trace2, Expression):
-            return self.robustness_trace(trace1, trace2.value, scale)
-        else:
-            return self.robustness_trace(trace1, trace2, scale)
+    # def forward(self, trace1, trace2, scale=0):
+    #     if isinstance(trace1, Expression) and isinstance(trace2, Expression):
+    #         return self.robustness_trace(trace1.value, trace2.value, scale)
+    #     elif isinstance(trace1, Expression):
+    #         return self.robustness_trace(trace1.value, trace2, scale)
+    #     elif isinstance(trace2, Expression):
+    #         return self.robustness_trace(trace1, trace2.value, scale)
+    #     else:
+    #         return self.robustness_trace(trace1, trace2, scale)
 
     def __str__(self):
         return  "(" + str(self.subformula1) + ")" + " T " + "(" + str(self.subformula2) + ")"
