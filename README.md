@@ -4,6 +4,7 @@ STLCG
 A toolbox to compute the robustness of STL formulas using computations graphs (PyTorch).
 
 ## Installation
+This was done on a linux machine running Python 3.5. You may need to change some of the packages in requirements to make it work on your setup. If you are running Python3.6, you may need to remove `importlib==1.0.4`.
 
 First create a virtual environment
 ```
