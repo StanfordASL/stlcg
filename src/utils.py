@@ -2,7 +2,6 @@
 import torch
 import numpy as np
 
-
 LARGE_NUMBER = 1E4
 
 def bump(input_tensor, left, right, slope):
@@ -33,3 +32,16 @@ def tensor_to_str(tensor):
     if device == "cuda":
         tensor = tensor.cpu()
     return str(tensor.numpy())
+
+def print_learning_progress(formula, inputs, var_dict, i, loss, scale):
+    vals = [i, loss]
+    string = "iteration: %i -- loss: %.3f"
+    for (k,v) in var_dict.items():
+        string += " ---- %s:%.3f"
+        vals.append(k)
+        vals.append(v)
+    string += " ---- scale:%.3f"
+    vals.append(scale)
+    string += " ---- true value:%.3f"
+    vals.append(formula.robustness(inputs).detach().numpy())
+    print(string%tuple(vals))
