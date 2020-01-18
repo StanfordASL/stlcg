@@ -12,7 +12,7 @@ def bump(input_tensor, left, right, slope):
     mask = (torch.sigmoid(slope*(input_tensor - left))*(1 - torch.sigmoid(slope*(input_tensor - right))))
     return mask/torch.max(mask)
 
-def bump_transform(oper, input_tensor, mask, scale=1, large_num = LARGE_NUMBER):
+def bump_transform(oper, input_tensor, mask, scale=1, large_num=LARGE_NUMBER):
     '''
     non-masked numbers will be a large positive (or negative) number, so we can take the min (or max) properly
     '''

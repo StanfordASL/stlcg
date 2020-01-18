@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 import torch
 import numpy as np
-from utils import tensor_to_str
+import os
+import sys
+
+# from utils import tensor_to_str
 '''
 Important information:
 - Assume inputs are already reversed, but user does not need to worry about the indexing.
@@ -18,6 +21,19 @@ Important information:
 # - Implement log-barrier
 
 LARGE_NUMBER = 1E4
+
+def tensor_to_str(tensor):
+    '''
+    turn tensor into a string for printing
+    '''
+    device = tensor.device.type
+    req_grad = tensor.requires_grad
+    if req_grad == False:
+        return "input"
+    tensor = tensor.detach()
+    if device == "cuda":
+        tensor = tensor.cpu()
+    return str(tensor.numpy())
 
 def convert_to_input_values(inputs):
     x_, y_ = inputs
@@ -132,11 +148,11 @@ class STL_Formula(torch.nn.Module):
         '''
         if isinstance(inputs, Expression):
             assert inputs._value is not None, "Input Expression does not have numerical values"
-            return formula.robustness_trace(inputs._value)
+            return formula.robustness_trace(inputs._value, pscale=pscale, scale=scale, **kwargs)
         elif isinstance(inputs, torch.Tensor):
-            return formula.robustness_trace(inputs)
+            return formula.robustness_trace(inputs, pscale=pscale, scale=scale, **kwargs)
         elif isinstance(inputs, tuple):
-            return formula.robustness_trace(convert_to_input_values(inputs))
+            return formula.robustness_trace(convert_to_input_values(inputs), pscale=pscale, scale=scale, **kwargs)
         else:
             raise ValueError("Not a invalid input trace")
 
