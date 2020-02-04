@@ -369,6 +369,31 @@ class Negation(STL_Formula):
     def __str__(self):
         return "¬(" + str(self.subformula) + ")"
 
+class Implies(STL_Formula):
+    '''
+    Implies
+    '''
+    def __init__(self, subformula1, subformula2):
+        super(Implies, self).__init__()
+        self.subformula1 = subformula1
+        self.subformula2 = subformula2
+        self.operation = Maxish()
+
+
+    def robustness_trace(self, inputs, pscale=1, scale=-1, **kwargs):
+        x, y = inputs
+        trace1 = self.subformula1(x, pscale=pscale, scale=scale)
+        trace2 = self.subformula2(y, pscale=pscale, scale=scale)
+        xx = torch.stack([-trace1, trace2], dim=-1)      # [batch_size, time_dim, ..., 2]
+        return self.operation(xx, scale, dim=-1, keepdim=False)   # [batch_size, time_dim, ...]
+
+    def _next_function(self):
+        # next function is actually input (traverses the graph backwards)
+        return [self.subformula1, self.subformula2]
+
+    def __str__(self):
+        return "(" + str(self.subformula1) + ") => (" + str(self.subformula2) + ")"
+
 class And(STL_Formula):
     '''
     inputs: tuple (x,y) where x and y are the inputs to each subformula respectively. x or y can also be a tuple if the subformula requires multiple inputs (e.g, ϕ₁(x) ∧ (ϕ₂(y) ∧ ϕ₃(z) would have inputs=(x, (y,z)))    )
