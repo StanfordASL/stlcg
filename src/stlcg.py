@@ -467,7 +467,7 @@ class Until(STL_Formula):
         minish = Minish()
         maxish = Maxish()
         LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)                                  # [batch_size, time_dim, x_dim, time_dim]
-        RHS = torch.ones(LHS.shape)*-LARGE_NUMBER                                                    # [batch_size, time_dim, x_dim, time_dim]
+        RHS = torch.ones(LHS.shape).to(x.device)*-LARGE_NUMBER                                                    # [batch_size, time_dim, x_dim, time_dim]
         for i in range(trace2.shape[1]):
             RHS[:,i:,:,i] = Alw(trace1[:,i:,:], pscale=pscale, scale=scale)
         # first min over the (ρ(ψ), ◻ρ(ϕ))
