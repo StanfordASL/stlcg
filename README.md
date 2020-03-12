@@ -28,7 +28,9 @@ The vizualization code here is constructed from https://github.com/szagoruyko/py
 ## Publications
 Here are a list of publications that use stlcg. Please file an issue, or pull request to add your publication to the list.
 
-[K. Leung, N. Arechiga, and M. Pavone, “Backpropagation for Parametric STL,” in IEEE Intelligent Vehicles Symposium: Workshop on Unsupervised Learning for Automated Driving, Paris, France, 2019.](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.ea.ULAD19.pdf)
+[K. Leung, N. Arechiga, and M. Pavone, "Backpropagation for Parametric STL," in IEEE Intelligent Vehicles Symposium: Workshop on Unsupervised Learning for Automated Driving, Paris, France, 2019.](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.ea.ULAD19.pdf)
+
+[K. Leung, N. Aréchiga, and M. Pavone, "Back-propagation through STL specifications: Infusing logical structure into gradient-based methods," (submitted)](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.Pavone.WAFR20.pdf)
 
 ## Feedback
 
