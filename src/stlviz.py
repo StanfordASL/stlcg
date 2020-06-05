@@ -7,7 +7,13 @@ from torch.autograd import Variable
 Node = namedtuple('Node', ('name', 'inputs', 'attr', 'op'))
 
 
-def make_stl_graph(form):
+def make_stl_graph(form, node_attr=dict(style='filled',
+                                          shape='box',
+                                          align='left',
+                                          fontsize='12',
+                                          ranksep='0.1',
+                                          height='0.2'),
+                         graph_attr=dict(size="12,12")):
     """ Produces Graphviz representation of PyTorch autograd graph.
     Blue nodes are the Variables that require grad, orange are Tensors
     saved for backward in torch.autograd.Function
@@ -17,13 +23,13 @@ def make_stl_graph(form):
             require grad (TODO: make optional)
     """
 
-    node_attr = dict(style='filled',
-                     shape='box',
-                     align='left',
-                     fontsize='12',
-                     ranksep='0.1',
-                     height='0.2')
-    dot = Digraph(node_attr=node_attr, graph_attr=dict(size="12,12"))
+    # node_attr = dict(style='filled',
+    #                  shape='box',
+    #                  align='left',
+    #                  fontsize='12',
+    #                  ranksep='0.1',
+    #                  height='0.2')
+    dot = Digraph(node_attr=node_attr, graph_attr=graph_attr)
     seen = set()
 
     def size_to_str(size):
