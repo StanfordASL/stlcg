@@ -2,6 +2,12 @@ STLCG
 ======
 
 A toolbox to compute the robustness of STL formulas using computations graphs (PyTorch).
+This branch `wafr20` reproduces the results and figures from our WAFR20 paper:
+
+[K. Leung, N. Aréchiga, and M. Pavone, "Back-propagation through STL specifications: Infusing logical structure into gradient-based methods," in Workshop on Algorithmic Foundations of Robotics, Oulu, Finland, 2020. ](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.Pavone.WAFR20.pdf)
+
+The specific files can be found in the `experiments/wafr20` folder. Most of the code is written in jupyter notebook, and the files in the `scripts` folder generate plots using pre-saved data.
+
 
 ## Installation
 This was done on a linux machine running Python 3.5. You may need to change some of the packages in requirements to make it work on your setup. If you are running Python3.6 or higher, you may need to remove `importlib==1.0.4`.
