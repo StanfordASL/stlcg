@@ -226,8 +226,8 @@ def stlcg_gpu_trafficweave(n_trials):
 
 if __name__ == "__main__":
     arguments = sys.argv[1:]
-    M = 500
-    num = 1
+    M = 500  # batch size
+    num = 1  # number of repetitions
     func_i = int(sys.argv[1])
     func_map = {1: stlcg_settling, 2: binary_search_settling, 3: stlcg_overshoot, 4: binary_search_overshoot, 5: stlcg_gpu_settling, 6: stlcg_gpu_overshoot}
     if len(arguments) == 2:

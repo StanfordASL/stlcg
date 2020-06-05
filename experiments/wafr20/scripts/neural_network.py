@@ -52,8 +52,8 @@ def generate_plot_from_data_bump(robustness_weight):
     plt.grid()
 
     plt.tight_layout()
-
-    plt.savefig("../figs/neural_network/bump/bump_comparison_robustness_weight=%.2f.png"%robustness_weight)
+    plt.show()
+    # plt.savefig("../figs/neural_network/bump/bump_comparison_robustness_weight=%.2f.png"%robustness_weight)
 
 def generate_plot_from_data_intent(robustness_weight):
 
@@ -155,14 +155,14 @@ def generate_plot_from_data_intent(robustness_weight):
     plt.xlim([-1, 1])
     plt.axis("equal")
     plt.legend(loc="upper left", fontsize=20)
-    plt.title("With robustness regularization $\gamma=%.2f"%robustness_weight, fontsize=26)
+    plt.title("With robustness regularization γ=%.2f"%robustness_weight, fontsize=26)
     plt.xlabel("Time steps", fontsize=20)
     plt.ylabel("s", fontsize=20)
     plt.tight_layout()
     plt.grid()
 
-
-    plt.savefig("../figs/neural_network/intent/intent_comparison_robustness_weight=%.2f.png"%robustness_weight)
+    plt.show()
+    # plt.savefig("../figs/neural_network/intent/intent_comparison_robustness_weight=%.2f.png"%robustness_weight)
 
 
 if __name__ == '__main__':
