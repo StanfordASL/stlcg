@@ -1,6 +1,9 @@
 STLCG
 ======
 
+
+## STLCG Toolbox
+
 A toolbox to compute the robustness of STL formulas using computations graphs (PyTorch).
 This branch `wafr20` reproduces the results and figures from our WAFR20 paper:
 
@@ -35,9 +38,18 @@ The vizualization code here is constructed from https://github.com/szagoruyko/py
 Here are a list of publications that use stlcg. Please file an issue, or pull request to add your publication to the list.
 
 
-[K. Leung, N. Aréchiga, and M. Pavone, "Back-propagation through STL specifications: Infusing logical structure into gradient-based methods," in Workshop on Algorithmic Foundations of Robotics, Oulu, Finland, 2020. ](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.Pavone.WAFR20.pdf)
+[J. DeCastro, K. Leung, N. Aréchiga, and M. Pavone, "Interpretable Policies from Formally-Specified Temporal Properties,"" in Proc. IEEE Int. Conf. on Intelligent Transportation Systems, Rhodes, Greece, 2020.](http://asl.stanford.edu/wp-content/papercite-data/pdf/DeCastro.Leung.ea.ITSC20.pdf)
+
+[K. Leung, N. Aréchiga, and M. Pavone, "Back-propagation through STL specifications: Infusing logical structure into gradient-based methods," in Workshop on Algorithmic Foundations of Robotics, Oulu, Finland, 2020.](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.Pavone.WAFR20.pdf)
 
 [K. Leung, N. Arechiga, and M. Pavone, "Backpropagation for Parametric STL," in IEEE Intelligent Vehicles Symposium: Workshop on Unsupervised Learning for Automated Driving, Paris, France, 2019.](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.ea.ULAD19.pdf)
+
+
+
+## Disclaimer:
+This code was used generate the results/plots/figures to our WAFR2020 paper ["Back-propagation through STL specifications: Infusing logical structure into gradient-based methods,"](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.Pavone.WAFR20.pdf)
+
+The stlcg package has been updated since (see master and/or dev branches) and this wafr20 branch has not been kept up. This wafr20 branch should work in isolation, and there is no guarantee that the plot-generating code will work with the most updated version of stlcg.py in the master/dev branches. 
 
 
 ## Feedback
