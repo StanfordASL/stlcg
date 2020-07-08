@@ -49,7 +49,7 @@ Here are a list of publications that use stlcg. Please file an issue, or pull re
 ## Disclaimer:
 This code was used generate the results/plots/figures to our WAFR2020 paper ["Back-propagation through STL specifications: Infusing logical structure into gradient-based methods,"](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.Pavone.WAFR20.pdf)
 
-The stlcg package has been updated since (see master and/or dev branches) and this wafr20 branch has not been kept up. This wafr20 branch should work in isolation, and there is no guarantee that the plot-generating code will work with the most updated version of stlcg.py in the master/dev branches. 
+The stlcg package has been updated since (see master and/or dev branches) and this `wafr20` branch has not been kept up. This `wafr20` branch should work in isolation, and there is no guarantee that the plot-generating code will work with the most updated version of stlcg.py in the master/dev branches. 
 
 
 ## Feedback
