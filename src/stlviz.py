@@ -3,7 +3,8 @@ from distutils.version import LooseVersion
 from graphviz import Digraph
 import torch
 from torch.autograd import Variable
-
+from stlcg import Expression, STL_Formula
+import IPython
 Node = namedtuple('Node', ('name', 'inputs', 'attr', 'op'))
 
 
@@ -49,13 +50,22 @@ def make_stl_graph(form, node_attr=dict(style='filled',
         # green are optimization variables
         # blue are non-optimization variables
         # orange are formula nodes
+        # red is ambiguous, could be an optimization variable or it could not.
+
         if torch.is_tensor(form):
             color = "palegreen" if form.requires_grad else "lightskyblue"
             dot.node(str(id(form)), tensor_to_str(form), fillcolor=color)
+        elif isinstance(form, Expression):
+            color = "palegreen" if form.value.requires_grad else "lightskyblue"
+            dot.node(str(id(form)), form.name, fillcolor=color)
         elif type(form) == str:
-            dot.node(str(id(form)), form, fillcolor="lightskyblue")
-        else:
+            dot.node(str(id(form)), form, fillcolor="lightcoral")
+        elif isinstance(form, STL_Formula):
             dot.node(str(id(form)), form._get_name() + "\n" + str(form), fillcolor="orange")
+        else:
+            dot.node(str(id(form)), str(form), fillcolor="lightcoral")
+
+        # recursive call to all the components of the formula
         if hasattr(form, '_next_function'):
             for u in form._next_function():
                 dot.edge(str(id(u)), str(id(form)))
@@ -87,6 +97,7 @@ def make_stl_graph(form, node_attr=dict(style='filled',
     #                 dot.edge(str(id(t)), str(id(var)))
     #                 add_nodes(t)
 
+    
     # handle multiple outputs
     if isinstance(form, tuple):
         for v in form:
