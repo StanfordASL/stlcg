@@ -96,7 +96,8 @@ class Maxish(torch.nn.Module):
                     return -torch.log(1-x).mean(dim=dim, keepdim=keepdim).exp() + 1
             else:
                 # return (torch.softmax(x*scale, dim=dim)*x).sum(dim, keepdim=keepdim)
-                return torch.log(torch.exp(x*scale).sum(dim=dim, keepdim=keepdim))/scale
+                # return torch.log(torch.exp(x*scale).sum(dim=dim, keepdim=keepdim))/scale
+                return torch.logsumexp(x * scale, dim=dim, keepdim=keepdim)/scale
         else:
             if distributed:
                 return self.distributed_true_max(x, dim=dim, keepdim=keepdim)
@@ -151,7 +152,8 @@ class Minish(torch.nn.Module):
                     return  (torch.lt(x,0) * x).sum(dim, keepdim=keepdim) / torch.lt(x, 0).sum(dim, keepdim=keepdim)
             else:
                 # return (torch.softmax(-x*scale, dim=dim)*x).sum(dim, keepdim=keepdim)
-                return -torch.log(torch.exp(-x*scale).sum(dim=dim, keepdim=keepdim))/scale
+                # return -torch.log(torch.exp(-x*scale).sum(dim=dim, keepdim=keepdim))/scale
+                return -torch.logsumexp(-x * scale, dim=dim, keepdim=keepdim)/scale
 
         else:
             if distributed:
