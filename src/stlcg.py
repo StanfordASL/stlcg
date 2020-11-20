@@ -28,6 +28,8 @@ def tensor_to_str(tensor):
     '''
     turn tensor into a string for printing
     '''
+    if isinstance(tensor, float) or isinstance(tensor, np.ndarray):
+        return str(tensor)
     device = tensor.device.type
     req_grad = tensor.requires_grad
     if req_grad == False:
@@ -618,7 +620,7 @@ class Until(STL_Formula):
         maxish = Maxish()
         LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)                                  # [batch_size, time_dim, x_dim, time_dim]
         # TODO: make same as first/last value in the input.
-        RHS = torch.ones(LHS.shape).to(x.device)*-LARGE_NUMBER                                                    # [batch_size, time_dim, x_dim, time_dim]
+        RHS = torch.ones_like(LHS)*-LARGE_NUMBER                                                    # [batch_size, time_dim, x_dim, time_dim]
         for i in range(trace2.shape[1]):
             RHS[:,i:,:,i] = Alw(trace1[:,i:,:], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
         # first min over the (ρ(ψ), ◻ρ(ϕ))
@@ -657,7 +659,7 @@ class Then(STL_Formula):
         maxish = Maxish()
         LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)                                  # [batch_size, time_dim, x_dim, time_dim]
         # TODO: make same as first/last value in the input.
-        RHS = torch.ones(LHS.shape)*-LARGE_NUMBER                                                 # [batch_size, time_dim, x_dim, time_dim]
+        RHS = torch.ones_like(LHS)*-LARGE_NUMBER                                                 # [batch_size, time_dim, x_dim, time_dim]
         for i in range(trace2.shape[1]):
             RHS[:,i:,:,i] = Ev(trace1[:,i:,:], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
         # first min over the (ρ(ψ), ◻ρ(ϕ))
