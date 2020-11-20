@@ -674,7 +674,7 @@ class Or(STL_Formula):
         return "(" + str(self.subformula1) + ") ∨ (" + str(self.subformula2) + ")"
 
 class Until(STL_Formula):
-    def __init__(self, subformula1="Until subformula1", subformula2="Until subformula2", overlap=True):
+    def __init__(self, subformula1="Until subformula1", subformula2="Until subformula2", interval=None, overlap=True):
         '''
         subformula1 U subformula2 (ϕ U ψ)
         This assumes that ϕ is always true before ψ becomes true.
@@ -684,6 +684,7 @@ class Until(STL_Formula):
         super(Until, self).__init__()
         self.subformula1 = subformula1
         self.subformula2 = subformula2
+        self.interval = interval
         if overlap == False:
             self.subformula2 = Eventually(subformula=subformula2, interval=[0,1])
 
@@ -696,20 +697,38 @@ class Until(STL_Formula):
         '''
         assert isinstance(self.subformula1, STL_Formula), "Subformula1 needs to be an stl formula"
         assert isinstance(self.subformula2, STL_Formula), "Subformula2 needs to be an stl formula"
-        x, y = inputs
-        trace1 = self.subformula1(x, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
-        trace2 = self.subformula2(y, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
+        LARGE_NUMBER = 1E6
+        interval = self.interval
+        trace1 = self.subformula1(inputs[0])
+        trace2 = self.subformula2(inputs[1])
         Alw = Always(subformula=Identity(name=str(self.subformula1)))
         minish = Minish()
         maxish = Maxish()
-        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)                                  # [batch_size, time_dim, x_dim, time_dim]
-        # TODO: make same as first/last value in the input.
-        RHS = torch.ones_like(LHS)*-LARGE_NUMBER                                                    # [batch_size, time_dim, x_dim, time_dim]
-        for i in range(trace2.shape[1]):
-            RHS[:,i:,:,i] = Alw(trace1[:,i:,:], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
-        # first min over the (ρ(ψ), ◻ρ(ϕ))
-        # then max over the t′ dimension (the second time_dim dimension)
-        return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)                                                              # [batch_size, time_dim, x_dim]
+        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)
+        RHS = torch.ones_like(LHS)*-LARGE_NUMBER  
+        if interval == None:
+            for i in range(trace2.shape[1]):
+                RHS[:,i:,:,i] = Alw(trace1[:,i:,:])
+            return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)   
+        elif interval[1] < np.Inf:
+            a = int(interval[0])
+            b = int(interval[1])
+            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER] 
+            for i in range(b,trace2.shape[1]):
+                A = trace2[:,i-b:i-a+1,:].unsqueeze(-1)
+                relevant = trace1[:,:i+1,:]
+                B = Alw(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:b+1,:].unsqueeze(-1)
+                RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
+            return torch.cat(RHS, dim=1);
+        else:
+            a = int(interval[0])
+            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER] 
+            for i in range(a,trace2.shape[1]):
+                A = trace2[:,:i-a+1,:].unsqueeze(-1)
+                relevant = trace1[:,:i+1,:]
+                B = Alw(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:,:].unsqueeze(-1)
+                RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
+            return torch.cat(RHS, dim=1);
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
@@ -722,10 +741,11 @@ class Then(STL_Formula):
     '''
     subformula1 T subformula2
     '''
-    def __init__(self, subformula1, subformula2, overlap=True):
+    def __init__(self, subformula1, subformula2, interval=None, overlap=True):
         super(Then, self).__init__()
         self.subformula1 = subformula1
         self.subformula2 = subformula2
+        self.interval = interval
         if overlap == False:
             self.subformula2 = Eventually(subformula=subformula2, interval=[0,1])
 
@@ -735,22 +755,40 @@ class Then(STL_Formula):
         trace2 is the robustness trace of ψ
         trace1 and trace2 are size [batch_size, time_dim, x_dim]
         '''
-        assert not isinstance(self.subformula1, str), "Subformula1 needs to be an stl formula"
-        assert not isinstance(self.subformula2, str), "Subformula2 needs to be an stl formula"
-        x, y = inputs
-        trace1 = self.subformula1(x, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
-        trace2 = self.subformula2(y, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
+        assert isinstance(self.subformula1, STL_Formula), "Subformula1 needs to be an stl formula"
+        assert isinstance(self.subformula2, STL_Formula), "Subformula2 needs to be an stl formula"
+        LARGE_NUMBER = 1E6
+        interval = self.interval
+        trace1 = self.subformula1(inputs[0])
+        trace2 = self.subformula2(inputs[1])
         Ev = Eventually(subformula=Identity(name=str(self.subformula1)))
         minish = Minish()
         maxish = Maxish()
-        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)                                  # [batch_size, time_dim, x_dim, time_dim]
-        # TODO: make same as first/last value in the input.
-        RHS = torch.ones_like(LHS)*-LARGE_NUMBER                                                 # [batch_size, time_dim, x_dim, time_dim]
-        for i in range(trace2.shape[1]):
-            RHS[:,i:,:,i] = Ev(trace1[:,i:,:], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
-        # first min over the (ρ(ψ), ◻ρ(ϕ))
-        # then max over the t′ dimension (the second time_dim dimension)
-        return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)                                                              # [batch_size, time_dim, x_dim]
+        LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)
+        RHS = torch.ones_like(LHS)*-LARGE_NUMBER  
+        if interval == None:
+            for i in range(trace2.shape[1]):
+                RHS[:,i:,:,i] = Ev(trace1[:,i:,:])
+            return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)   
+        elif interval[1] < np.Inf:
+            a = int(interval[0])
+            b = int(interval[1])
+            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER] 
+            for i in range(b,trace2.shape[1]):
+                A = trace2[:,i-b:i-a+1,:].unsqueeze(-1)
+                relevant = trace1[:,:i+1,:]
+                B = Ev(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:b+1,:].unsqueeze(-1)
+                RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
+            return torch.cat(RHS, dim=1);
+        else:
+            a = int(interval[0])
+            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER] 
+            for i in range(a,trace2.shape[1]):
+                A = trace2[:,:i-a+1,:].unsqueeze(-1)
+                relevant = trace1[:,:i+1,:]
+                B = Ev(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:,:].unsqueeze(-1)
+                RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
+            return torch.cat(RHS, dim=1);                                                    # [batch_size, time_dim, x_dim]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
