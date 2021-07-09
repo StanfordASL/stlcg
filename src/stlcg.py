@@ -60,7 +60,7 @@ def convert_to_input_values(inputs):
         raise ValueError("Second argument is an invalid input trace")
 
     return (x_ret, y_ret)
-    
+
 
 class Maxish(torch.nn.Module):
     '''
@@ -81,7 +81,7 @@ class Maxish(torch.nn.Module):
         keepdim keeps the dimension of the input tensor. Default: True
 
         agm is the arithmetic-geometric mean. Currently in progress. If some elements are >0, output is the average of those elements. If all the elements <= 0, output is -ᵐ√(Πᵢ (1 - ηᵢ)) + 1. scale doesn't play a role here except to switch between the using the AGM or true robustness value (scale <=0). Default: False
-        
+
         distributed addresses the case when there are multiple max values. As max is poorly defined in these cases, PyTorch (randomly?) selects one of the max values only. If distributed=True and scale <=0 then it will average over the max values and split the gradients equally. Default: False
         '''
 
@@ -250,7 +250,7 @@ class Identity(STL_Formula):
         self.name = name
 
     def robustness_trace(self, trace, pscale=1, **kwargs):
-        return trace * pscale 
+        return trace * pscale
 
     def _next_function(self):
         return []
@@ -287,7 +287,7 @@ class Temporal_Operator(STL_Formula):
         '''
         x is [batch_size, time_dim, x_dim]
         initial rnn state is [batch_size, rnn_dim, x_dim]
-        This requires padding on the signal. Currently, the default is to extend the last value. 
+        This requires padding on the signal. Currently, the default is to extend the last value.
         TODO: have option on this padding
 
         The initial hidden state is of the form (hidden_state, count). count is needed just for the case with self.interval=[0, np.inf) and distributed=True. Since we are scanning through the sigal and outputing the min values incrementally, the distributed min function doesn't apply. If there are multiple min values along the signal, the gradient will be distributed equally across them. Otherwise it will only apply to the value that occurs earliest in the signal (i.e., last as we process the signal backwards).
@@ -380,7 +380,7 @@ class Always(Temporal_Operator):
                 d0, h0 = h0
                 dh = torch.cat([d0, h0[:,:1,:]], dim=1)                             # [batch_size, 2, x_dim]
                 output = self.operation(dh, scale, dim=1, keepdim=True, agm=agm, distributed=distributed)               # [batch_size, 1, x_dim]
-                state = ((output, torch.matmul(self.M, h0) + self.b * x), None)    
+                state = ((output, torch.matmul(self.M, h0) + self.b * x), None)
             else: # self.interval is [a, b]
                 state = (torch.matmul(self.M, h0) + self.b * x, None)
                 h0x = torch.cat([h0, x], dim=1)                             # [batch_size, rnn_dim+1, x_dim]
@@ -441,7 +441,7 @@ class Eventually(Temporal_Operator):
                 d0, h0 = h0
                 dh = torch.cat([d0, h0[:,:1,:]], dim=1)                             # [batch_size, 2, x_dim]
                 output = self.operation(dh, scale, dim=1, keepdim=True, agm=agm, distributed=distributed)               # [batch_size, 1, x_dim]
-                state = ((output, torch.matmul(self.M, h0) + self.b * x), None)    
+                state = ((output, torch.matmul(self.M, h0) + self.b * x), None)
             else:
                 state = (torch.matmul(self.M, h0) + self.b * x, None)
                 h0x = torch.cat([h0, x], dim=1)                             # [batch_size, rnn_dim+1, x_dim]
@@ -455,7 +455,7 @@ class Eventually(Temporal_Operator):
 class LessThan(STL_Formula):
     '''
     lhs <= val where lhs is the signal, and val is the constant.
-    lhs can be a string or an Expression 
+    lhs can be a string or an Expression
     val can be a float, int, Expression, or tensor. It cannot be a string.
     '''
     def __init__(self, lhs='x', val='c'):
@@ -496,7 +496,7 @@ class LessThan(STL_Formula):
 class GreaterThan(STL_Formula):
     '''
     lhs >= val where lhs is the signal, and val is the constant.
-    lhs can be a string or an Expression 
+    lhs can be a string or an Expression
     val can be a float, int, Expression, or tensor. It cannot be a string.
     '''
     def __init__(self, lhs='x', val='c'):
@@ -536,7 +536,7 @@ class GreaterThan(STL_Formula):
 class Equal(STL_Formula):
     '''
     lhs == val where lhs is the signal, and val is the constant.
-    lhs can be a string or an Expression 
+    lhs can be a string or an Expression
     val can be a float, int, Expression, or tensor. It cannot be a string.
     '''
     def __init__(self, lhs='x', val='c'):
@@ -705,28 +705,28 @@ class Until(STL_Formula):
         minish = Minish()
         maxish = Maxish()
         LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)
-        RHS = torch.ones_like(LHS)*-LARGE_NUMBER  
         if interval == None:
+            RHS = torch.ones_like(LHS)*-LARGE_NUMBER
             for i in range(trace2.shape[1]):
                 RHS[:,i:,:,i] = Alw(trace1[:,i:,:])
-            return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)   
+            return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)
         elif interval[1] < np.Inf:
             a = int(interval[0])
             b = int(interval[1])
-            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER] 
+            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER]
             for i in range(b,trace2.shape[1]):
                 A = trace2[:,i-b:i-a+1,:].unsqueeze(-1)
                 relevant = trace1[:,:i+1,:]
-                B = Alw(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:b+1,:].unsqueeze(-1)
+                B = Alw(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:b+1,:].flip(1).unsqueeze(-1)
                 RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
             return torch.cat(RHS, dim=1);
         else:
             a = int(interval[0])
-            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER] 
+            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER]
             for i in range(a,trace2.shape[1]):
                 A = trace2[:,:i-a+1,:].unsqueeze(-1)
                 relevant = trace1[:,:i+1,:]
-                B = Alw(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:,:].unsqueeze(-1)
+                B = Alw(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:,:].flip(1).unsqueeze(-1)
                 RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
             return torch.cat(RHS, dim=1);
 
@@ -765,28 +765,28 @@ class Then(STL_Formula):
         minish = Minish()
         maxish = Maxish()
         LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)
-        RHS = torch.ones_like(LHS)*-LARGE_NUMBER  
+        RHS = torch.ones_like(LHS)*-LARGE_NUMBER
         if interval == None:
             for i in range(trace2.shape[1]):
                 RHS[:,i:,:,i] = Ev(trace1[:,i:,:])
-            return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)   
+            return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)
         elif interval[1] < np.Inf:
             a = int(interval[0])
             b = int(interval[1])
-            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER] 
+            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER]
             for i in range(b,trace2.shape[1]):
                 A = trace2[:,i-b:i-a+1,:].unsqueeze(-1)
                 relevant = trace1[:,:i+1,:]
-                B = Ev(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:b+1,:].unsqueeze(-1)
+                B = Ev(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:b+1,:].flip(1).unsqueeze(-1)
                 RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
             return torch.cat(RHS, dim=1);
         else:
             a = int(interval[0])
-            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER] 
+            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER]
             for i in range(a,trace2.shape[1]):
                 A = trace2[:,:i-a+1,:].unsqueeze(-1)
                 relevant = trace1[:,:i+1,:]
-                B = Ev(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:,:].unsqueeze(-1)
+                B = Ev(relevant.flip(1), scale=scale, keepdim=keepdim, distributed=distributed)[:,a:,:].flip(1).unsqueeze(-1)
                 RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
             return torch.cat(RHS, dim=1);                                                    # [batch_size, time_dim, x_dim]
 
@@ -809,7 +809,7 @@ class Integral1d(STL_Formula):
             for param in self.conv.parameters():
                 param.requires_grad = False
             self.conv.weight /= self.conv.weight
-            
+
 
 
     def construct_padding(self, padding_type, custom_number=100):
@@ -824,7 +824,7 @@ class Integral1d(STL_Formula):
             return None
 
     def robustness_trace(self, inputs, pscale=1, scale=-1, keepdim=False, use_relu=False, padding_type="same", custom_number=100, integration_scheme="riemann", **kwargs):
-        
+
         subformula_trace = self.subformula(inputs, pscale=pscale, scale=scale, keepdim=keepdim, **kwargs)
 
 
@@ -867,23 +867,23 @@ class Integral1d(STL_Formula):
 class Expression(torch.nn.Module):
     '''
     Wraps a pytorch arithmetic operation, so that we can intercept and overload comparison operators.
-    Expression allows us to express tensors using their names to make it easier to code up and read, 
+    Expression allows us to express tensors using their names to make it easier to code up and read,
     but also keep track of their numeric values.
     '''
     def __init__(self, name, value):
         super(Expression, self).__init__()
         self.name = name
         self.value = value
-        
+
     def set_name(self, new_name):
         self.name = new_name
-        
+
     def set_value(self, new_value):
         self.value = new_value
 
     def __neg__(self):
         return Expression(-self.value)
-    
+
     def __add__(self, other):
         if isinstance(other, Expression):
             return Expression(self.name + '+' + other.name, self.value + other.value)
@@ -893,7 +893,7 @@ class Expression(torch.nn.Module):
     def __radd__(self, other):
         return self.__add__(other)
         # No need for the case when "other" is an Expression, since that
-        # case will be handled by the regular add 
+        # case will be handled by the regular add
 
     def __sub__(self, other):
         if isinstance(other, Expression):
@@ -930,14 +930,14 @@ class Expression(torch.nn.Module):
             denom_name = denominator.name
             denominator = denominator.value
         return Expression(num_name + '/' + denom_name, numerator/denominator)
-        
+
     # Comparators
     def __lt__(lhs, rhs):
         assert isinstance(lhs, str) | isinstance(lhs, Expression), "LHS of LessThan needs to be a string or Expression"
         assert not isinstance(rhs, str), "RHS cannot be a string"
-        return LessThan(lhs, rhs) 
+        return LessThan(lhs, rhs)
         # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return LessThan(lhs, rhs) 
+        #     return LessThan(lhs, rhs)
         # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
@@ -952,7 +952,7 @@ class Expression(torch.nn.Module):
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return LessThan(lhs, rhs)
         # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return LessThan(lhs.name, rhs) 
+        #     return LessThan(lhs.name, rhs)
         # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
@@ -967,7 +967,7 @@ class Expression(torch.nn.Module):
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return GreaterThan(lhs, rhs)
         # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return GreaterThan(lhs.name, rhs) 
+        #     return GreaterThan(lhs.name, rhs)
         # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
@@ -982,7 +982,7 @@ class Expression(torch.nn.Module):
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return GreaterThan(lhs, rhs)
         # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return GreaterThan(lhs.name, rhs) 
+        #     return GreaterThan(lhs.name, rhs)
         # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
@@ -1002,14 +1002,14 @@ class Expression(torch.nn.Module):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
         # elif not isinstance(rhs, Expression):
-        #     return Equal(lhs.name, rhs) 
+        #     return Equal(lhs.name, rhs)
         # elif not isinstance(lhs, Expression):
         #     assert type(lhs)==str, "LHS of LessThan needs to be a string"
         #     return Equal(lhs, rhs)
 
     def __ne__(lhs, rhs):
         raise NotImplementedError("Not supported yet")
-        
+
     def __str__(self):
         return str(self.name)
 
