@@ -60,7 +60,7 @@ def convert_to_input_values(inputs):
         raise ValueError("Second argument is an invalid input trace")
 
     return (x_ret, y_ret)
-    
+
 
 class Maxish(torch.nn.Module):
     '''
@@ -72,7 +72,7 @@ class Maxish(torch.nn.Module):
 
     def forward(self, x, scale, dim=1, keepdim=True, agm=False, distributed=False):
         '''
-        x is of size [batch_size, N, ...] where N is typically the trace length.
+        x is of size [batch_size, T, ...] where T is typically the trace length.
 
         if scale <= 0, then the true max is used, otherwise, the softmax is used.
 
@@ -81,7 +81,7 @@ class Maxish(torch.nn.Module):
         keepdim keeps the dimension of the input tensor. Default: True
 
         agm is the arithmetic-geometric mean. Currently in progress. If some elements are >0, output is the average of those elements. If all the elements <= 0, output is -ᵐ√(Πᵢ (1 - ηᵢ)) + 1. scale doesn't play a role here except to switch between the using the AGM or true robustness value (scale <=0). Default: False
-        
+
         distributed addresses the case when there are multiple max values. As max is poorly defined in these cases, PyTorch (randomly?) selects one of the max values only. If distributed=True and scale <=0 then it will average over the max values and split the gradients equally. Default: False
         '''
 
@@ -95,7 +95,6 @@ class Maxish(torch.nn.Module):
                 else:
                     return -torch.log(1-x).mean(dim=dim, keepdim=keepdim).exp() + 1
             else:
-                # return (torch.softmax(x*scale, dim=dim)*x).sum(dim, keepdim=keepdim)
                 # return torch.log(torch.exp(x*scale).sum(dim=dim, keepdim=keepdim))/scale
                 return torch.logsumexp(x * scale, dim=dim, keepdim=keepdim)/scale
         else:
@@ -107,13 +106,19 @@ class Maxish(torch.nn.Module):
 
     @staticmethod
     def distributed_true_max(xx, dim=1, keepdim=True):
+        '''
+        If there are multiple values that share the same max value, the max value is computed by taking the mean of all those values.
+        This will ensure that the gradients of max(xx, dim=dim) will be distributed evenly across all values, rather than just the one value.
+        '''
         m, mi = torch.max(xx, dim, keepdim=True)
         inds = xx == m
         return torch.where(inds, xx, xx*0).sum(dim, keepdim=keepdim) / inds.sum(dim, keepdim=keepdim)
 
 
     def _next_function(self):
-        # next function is actually input (traverses the graph backwards)
+        '''
+        This is used for the graph visualization to keep track of the parent node.
+        '''
         return [str(self.input_name)]
 
 class Minish(torch.nn.Module):
@@ -126,7 +131,7 @@ class Minish(torch.nn.Module):
 
     def forward(self, x, scale, dim=1, keepdim=True, agm=False, distributed=False):
         '''
-        x is of size [batch_size, N, ...] where N is typically the trace length.
+        x is of size [batch_size, T, ...] where T is typically the trace length.
 
         if scale <= 0, then the true max is used, otherwise, the softmax is used.
 
@@ -151,7 +156,6 @@ class Minish(torch.nn.Module):
                     # return x[torch.lt(x, 0)].reshape(*x.shape[:-1], -1).mean(dim=dim, keepdim=keepdim)
                     return  (torch.lt(x,0) * x).sum(dim, keepdim=keepdim) / torch.lt(x, 0).sum(dim, keepdim=keepdim)
             else:
-                # return (torch.softmax(-x*scale, dim=dim)*x).sum(dim, keepdim=keepdim)
                 # return -torch.log(torch.exp(-x*scale).sum(dim=dim, keepdim=keepdim))/scale
                 return -torch.logsumexp(-x * scale, dim=dim, keepdim=keepdim)/scale
 
@@ -163,28 +167,35 @@ class Minish(torch.nn.Module):
 
     @staticmethod
     def distributed_true_min(xx, dim=1, keepdim=True):
+        '''
+        If there are multiple values that share the same max value, the min value is computed by taking the mean of all those values.
+        This will ensure that the gradients of min(xx, dim=dim) will be distributed evenly across all values, rather than just the one value.
+        '''
         m, mi = torch.min(xx, dim, keepdim=True)
         inds = xx == m
         return torch.where(inds, xx, xx*0).sum(dim, keepdim=keepdim) / inds.sum(dim, keepdim=keepdim)
 
 
     def _next_function(self):
-        # next function is actually input (traverses the graph backwards)
+        '''
+        This is used for the graph visualization to keep track of the parent node.
+        '''
         return [str(self.input_name)]
 
 
 
 class STL_Formula(torch.nn.Module):
     '''
+    NOTE: All the inputs are assumed to be TIME REVERSED. The outputs are also TIME REVERSED
     All STL formulas have the following functions:
-    robustness_trace: Computes the robustness trace using the method outlined in WAFR20 paper
-    robustness: Gets the last (since signal is reversed) entry of the robustness trace
-    eval_trace: Computes the robustness trace and returns True is the robustness value is > 0
-    eval: Gets the last (since signal is reversed) entry of the eval trace
-    forward: The forward function of this STL_formula PyTorhc module (default to the robustness_trace function)
+    robustness_trace: Computes the robustness trace.
+    robustness: Computes the robustness value of the trace
+    eval_trace: Computes the robustness trace and returns True in each entry if the robustness value is > 0
+    eval: Computes the robustness value and returns True if the robustness value is > 0
+    forward: The forward function of this STL_formula PyTorch module (default to the robustness_trace function)
 
-    inputs to these functions:
-    trace: the input signal. If the formula has two subformulas (e.g., And), then it is a tuple of the two inputs. An input can be a tensor of size [batch_size, time_dim,...], of an Expression with a ._val (Tensor) associated with the expression.
+    Inputs to these functions:
+    trace: the input signal assumed to be TIME REVERSED. If the formula has two subformulas (e.g., And), then it is a tuple of the two inputs. An input can be a tensor of size [batch_size, time_dim,...], or an Expression with a .value (Tensor) associated with the expression.
     pscale: predicate scale. Default: 1
     scale: scale for the max/min function.  Default: -1
     keepdim: Output shape is the same as the input tensor shapes. Default: True
@@ -200,19 +211,22 @@ class STL_Formula(torch.nn.Module):
 
     def robustness(self, inputs, time=0, pscale=1, scale=-1, keepdim=True, agm=False,distributed=False, **kwargs):
         '''
-        Extracts the robustness_trace value at the given time. (Default: time=0 from the user's perspective. But will be the taken from the end since the trace is reversed.)
+        Extracts the robustness_trace value at the given time.
+        Default: time=0 assuming this is the index for the NON-REVERSED trace. But the code will take it from the end since the input signal is TIME REVERSED.
+
         '''
-        return self.robustness_trace(inputs, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)[:,-(time+1),:].unsqueeze(1)
+        return self.forward(inputs, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)[:,-(time+1),:].unsqueeze(1)
 
     def eval_trace(self, inputs, pscale=1, scale=-1, keepdim=True, agm=False, distributed=False, **kwargs):
         '''
         The values in eval_trace are 0 or 1 (False or True)
         '''
-        return self.robustness_trace(inputs, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs) > 0
+        return self.forward(inputs, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs) > 0
 
     def eval(self, inputs, time=0, pscale=1, scale=-1, keepdim=True, agm=False, distributed=False, **kwargs):
         '''
-        Extracts the eval_trace value at the given time. (Default: time=0 from the user's perspective. But will be the taken from the end since the trace is reversed.)
+        Extracts the eval_trace value at the given time.
+        Default: time=0 assuming this is the index for the NON-REVERSED trace. But the code will take it from the end since the input signal is TIME REVERSED.
         '''
         return self.eval_trace(inputs, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)[:,-(time+1),:].unsqueeze(1)                 # [batch_size, time_dim, x_dim]
 
@@ -250,7 +264,7 @@ class Identity(STL_Formula):
         self.name = name
 
     def robustness_trace(self, trace, pscale=1, **kwargs):
-        return trace * pscale 
+        return trace * pscale
 
     def _next_function(self):
         return []
@@ -263,9 +277,10 @@ class Identity(STL_Formula):
 
 class Temporal_Operator(STL_Formula):
     '''
-    Class to compute Eventuall and Always. This builds an RNN cell (see WAFR20 paper)
+    Class to compute Eventually and Always. This builds a recurrent cell to perform dynamic programming
     subformula: The formula that the temporal operator is applied to.
     interval: either None (defaults to [0, np.inf]), [a, b] ( b < np.inf), [a, np.inf] (a > 0)
+    NOTE: Assume that the interval is describing the INDICES of the desired time interval. The user is responsible for converting the time interval (in time units) into indices (integers) using knowledge of the time step size.
     '''
     def __init__(self, subformula, interval=None):
         super(Temporal_Operator, self).__init__()
@@ -287,22 +302,25 @@ class Temporal_Operator(STL_Formula):
         '''
         x is [batch_size, time_dim, x_dim]
         initial rnn state is [batch_size, rnn_dim, x_dim]
-        This requires padding on the signal. Currently, the default is to extend the last value. 
+        This requires padding on the signal. Currently, the default is to extend the last value.
         TODO: have option on this padding
 
-        The initial hidden state is of the form (hidden_state, count). count is needed just for the case with self.interval=[0, np.inf) and distributed=True. Since we are scanning through the sigal and outputing the min values incrementally, the distributed min function doesn't apply. If there are multiple min values along the signal, the gradient will be distributed equally across them. Otherwise it will only apply to the value that occurs earliest in the signal (i.e., last as we process the signal backwards).
+        The initial hidden state is of the form (hidden_state, count). count is needed just for the case with self.interval=[0, np.inf) and distributed=True. Since we are scanning through the sigal and outputing the min/max values incrementally, the distributed min function doesn't apply. If there are multiple min values along the signal, the gradient will be distributed equally across them. Otherwise it will only apply to the value that occurs earliest as we scan through the signal (i.e., practically, the last value in the trace as we process the signal backwards).
         '''
         raise NotImplementedError("_initialize_rnn_cell is not implemented")
 
     def _rnn_cell(self, x, hc, scale=-1, agm=False, distributed=False,**kwargs):
         '''
         x: rnn input [batch_size, 1, ...]
-        h0: input rnn hidden state  (see WAFR20 paper) It depends on the interval chosen. Roughly in the form of [batch_size, rnn_dim,...]
+        h0: input rnn hidden state. The hidden state is either a tensor, or a tuple of tensors, depending on the interval chosen. Generally, the hidden state is of size [batch_size, rnn_dim,...]
         '''
         raise NotImplementedError("_initialize_rnn_cell is not implemented")
 
 
-    def _run_rnn_cell(self, x, scale, agm=False, distributed=False):
+    def _run_cell(self, x, scale, agm=False, distributed=False):
+        '''
+        Run the cell through the trace.
+        '''
 
         outputs = []
         states = []
@@ -313,14 +331,13 @@ class Temporal_Operator(STL_Formula):
             o, hc = self._rnn_cell(xs[i], hc, scale, agm=agm, distributed=distributed)
             outputs.append(o)
             states.append(hc)
-            # states.append(hc[0])
         return outputs, states
 
 
     def robustness_trace(self, inputs, pscale=1, scale=-1, keepdim=True, agm=False, distributed=False, **kwargs):
         # Compute the robustness trace of the subformula and that is the input to the temporal operator graph.
         trace = self.subformula(inputs, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
-        outputs, states = self._run_rnn_cell(trace, scale=scale, agm=agm, distributed=distributed)
+        outputs, states = self._run_cell(trace, scale=scale, agm=agm, distributed=distributed)
         return torch.cat(outputs, dim=1)                              # [batch_size, time_dim, ...]
 
     def _next_function(self):
@@ -336,7 +353,9 @@ class Always(Temporal_Operator):
         self.oper = "min"
 
     def _initialize_rnn_cell(self, x):
-        # init_val = LARGE_NUMBER
+        '''
+        Padding is with the last value of the trace
+        '''
         if x.is_cuda:
             self.M = self.M.cuda()
             self.b = self.b.cuda()
@@ -375,12 +394,12 @@ class Always(Temporal_Operator):
                 input_ = torch.cat([h0, x], dim=1)                          # [batch_size, rnn_dim+1, x_dim]
                 output = self.operation(input_, scale, dim=1, keepdim=True, agm=agm)       # [batch_size, 1, x_dim]
                 state = (output, None)
-        else: # is self.interval is [a, np.inf)
+        else: # self.interval is [a, np.inf)
             if (self._interval[1] == np.inf) & (self._interval[0] > 0):
                 d0, h0 = h0
                 dh = torch.cat([d0, h0[:,:1,:]], dim=1)                             # [batch_size, 2, x_dim]
                 output = self.operation(dh, scale, dim=1, keepdim=True, agm=agm, distributed=distributed)               # [batch_size, 1, x_dim]
-                state = ((output, torch.matmul(self.M, h0) + self.b * x), None)    
+                state = ((output, torch.matmul(self.M, h0) + self.b * x), None)
             else: # self.interval is [a, b]
                 state = (torch.matmul(self.M, h0) + self.b * x, None)
                 h0x = torch.cat([h0, x], dim=1)                             # [batch_size, rnn_dim+1, x_dim]
@@ -398,8 +417,9 @@ class Eventually(Temporal_Operator):
         self.oper = "max"
 
     def _initialize_rnn_cell(self, x):
-
-        # init_val = -LARGE_NUMBER
+        '''
+        Padding is with the last value of the trace
+        '''
         if x.is_cuda:
             self.M = self.M.cuda()
             self.b = self.b.cuda()
@@ -413,7 +433,8 @@ class Eventually(Temporal_Operator):
     def _rnn_cell(self, x, hc, scale=-1, agm=False, distributed=False, **kwargs):
         '''
         x: rnn input [batch_size, 1, ...]
-        h0: input rnn hidden state  [batch_size, rnn_dim, ...]
+        hc=(h0, c) h0 is the input rnn hidden state  [batch_size, rnn_dim, ...].
+        c is the count. Initialized by self._initialize_rnn_cell
         '''
         h0, c = hc
         if self.operation is None:
@@ -436,13 +457,13 @@ class Eventually(Temporal_Operator):
                 input_ = torch.cat([h0, x], dim=1)                          # [batch_size, rnn_dim+1, x_dim]
                 output = self.operation(input_, scale, dim=1, keepdim=True, agm=agm)       # [batch_size, 1, x_dim]
                 state = (output, None)
-        else:
+        else: # self.interval is [a, np.inf)
             if (self._interval[1] == np.inf) & (self._interval[0] > 0):
                 d0, h0 = h0
                 dh = torch.cat([d0, h0[:,:1,:]], dim=1)                             # [batch_size, 2, x_dim]
                 output = self.operation(dh, scale, dim=1, keepdim=True, agm=agm, distributed=distributed)               # [batch_size, 1, x_dim]
-                state = ((output, torch.matmul(self.M, h0) + self.b * x), None)    
-            else:
+                state = ((output, torch.matmul(self.M, h0) + self.b * x), None)
+            else: # self.interval is [a, b]
                 state = (torch.matmul(self.M, h0) + self.b * x, None)
                 h0x = torch.cat([h0, x], dim=1)                             # [batch_size, rnn_dim+1, x_dim]
                 input_ = h0x[:,:self.steps,:]                               # [batch_size, self.steps, x_dim]
@@ -455,7 +476,7 @@ class Eventually(Temporal_Operator):
 class LessThan(STL_Formula):
     '''
     lhs <= val where lhs is the signal, and val is the constant.
-    lhs can be a string or an Expression 
+    lhs can be a string or an Expression
     val can be a float, int, Expression, or tensor. It cannot be a string.
     '''
     def __init__(self, lhs='x', val='c'):
@@ -467,6 +488,12 @@ class LessThan(STL_Formula):
         self.subformula = None
 
     def robustness_trace(self, trace, pscale=1.0, **kwargs):
+        '''
+        Computing robustness trace.
+        pscale scales the robustness by a constant. Default pscale=1.
+        '''
+        if isinstance(trace, Expression):
+            trace = trace.value
         if isinstance(self.val, Expression):
             return (self.val.value - trace)*pscale
         else:
@@ -496,7 +523,7 @@ class LessThan(STL_Formula):
 class GreaterThan(STL_Formula):
     '''
     lhs >= val where lhs is the signal, and val is the constant.
-    lhs can be a string or an Expression 
+    lhs can be a string or an Expression
     val can be a float, int, Expression, or tensor. It cannot be a string.
     '''
     def __init__(self, lhs='x', val='c'):
@@ -508,6 +535,12 @@ class GreaterThan(STL_Formula):
         self.subformula = None
 
     def robustness_trace(self, trace, pscale=1.0, **kwargs):
+        '''
+        Computing robustness trace.
+        pscale scales the robustness by a constant. Default pscale=1.
+        '''
+        if isinstance(trace, Expression):
+            trace = trace.value
         if isinstance(self.val, Expression):
             return (trace - self.val.value)*pscale
         else:
@@ -536,7 +569,7 @@ class GreaterThan(STL_Formula):
 class Equal(STL_Formula):
     '''
     lhs == val where lhs is the signal, and val is the constant.
-    lhs can be a string or an Expression 
+    lhs can be a string or an Expression
     val can be a float, int, Expression, or tensor. It cannot be a string.
     '''
     def __init__(self, lhs='x', val='c'):
@@ -548,6 +581,12 @@ class Equal(STL_Formula):
         self.subformula = None
 
     def robustness_trace(self, trace, pscale=1.0, **kwargs):
+        '''
+        Computing robustness trace.
+        pscale scales the robustness by a constant. Default pscale=1.
+        '''
+        if isinstance(trace, Expression):
+            trace = trace.value
         if isinstance(self.val, Expression):
             return -torch.abs(trace - self.val.value)*pscale
 
@@ -606,7 +645,7 @@ class Implies(STL_Formula):
         trace1 = self.subformula1(x, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
         trace2 = self.subformula2(y, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
         xx = torch.stack([-trace1, trace2], dim=-1)      # [batch_size, time_dim, ..., 2]
-        return self.operation(xx, scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed)   # [batch_size, time_dim, ...]
+        return self.operation(xx, scale, dim=-1, keepdim=False, agm=agm, distributed=distributed)   # [batch_size, time_dim, ...]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
@@ -617,7 +656,7 @@ class Implies(STL_Formula):
 
 class And(STL_Formula):
     '''
-    inputs: tuple (x,y) where x and y are the inputs to each subformula respectively. x or y can also be a tuple if the subformula requires multiple inputs (e.g, ϕ₁(x) ∧ (ϕ₂(y) ∧ ϕ₃(z) would have inputs=(x, (y,z)))    )
+    inputs: tuple (x,y) where x and y are the inputs to each subformula respectively. x or y can also be a tuple if the subformula requires multiple inputs (e.g, ϕ₁(x) ∧ (ϕ₂(y) ∧ ϕ₃(z)) would have inputs=(x, (y,z)))
     trace1 and trace2 are size [batch_size, time_dim, x_dim]
     '''
     def __init__(self, subformula1, subformula2):
@@ -629,13 +668,13 @@ class And(STL_Formula):
     @staticmethod
     def separate_and(formula, input_, pscale=1, scale=-1, keepdim=True, agm=False, distributed=False, **kwargs):
         if formula.__class__.__name__ != "And":
-            return formula(input_, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
+            return formula(input_, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs).unsqueeze(-1)
         else:
             return torch.cat([And.separate_and(formula.subformula1, input_[0], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs), And.separate_and(formula.subformula2, input_[1], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)], axis=-1)
 
     def robustness_trace(self, inputs, pscale=1, scale=-1, keepdim=True, agm=False, distributed=False, **kwargs):
         xx = torch.cat([And.separate_and(self.subformula1, inputs[0], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs), And.separate_and(self.subformula2, inputs[1], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)], axis=-1)
-        return self.operation(xx, scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed)                                         # [batch_size, time_dim, ...]
+        return self.operation(xx, scale, dim=-1, keepdim=False, agm=agm, distributed=distributed)                                         # [batch_size, time_dim, ...]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
@@ -646,7 +685,7 @@ class And(STL_Formula):
 
 class Or(STL_Formula):
     '''
-    inputs: tuple (x,y) where x and y are the inputs to each subformula respectively. x or y can also be a tuple if the subformula requires multiple inputs (e.g, ϕ₁(x) ∧ (ϕ₂(y) ∧ ϕ₃(z) would have inputs=(x, (y,z)))    )
+    inputs: tuple (x,y) where x and y are the inputs to each subformula respectively. x or y can also be a tuple if the subformula requires multiple inputs (e.g, ϕ₁(x) ∨ (ϕ₂(y) ∨ ϕ₃(z)) would have inputs=(x, (y,z)))
     trace1 and trace2 are size [batch_size, time_dim, x_dim]
     '''
     def __init__(self, subformula1, subformula2):
@@ -658,13 +697,13 @@ class Or(STL_Formula):
     @staticmethod
     def separate_or(formula, input_, pscale=1, scale=-1, keepdim=True, agm=False, distributed=False, **kwargs):
         if formula.__class__.__name__ != "Or":
-            return formula(input_, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
+            return formula(input_, pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs).unsqueeze(-1)
         else:
             return torch.cat([Or.separate_or(formula.subformula1, input_[0], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs), Or.separate_or(formula.subformula2, input_[1], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)], axis=-1)
 
     def robustness_trace(self, inputs, pscale=1, scale=-1, keepdim=True, agm=False, distributed=False, **kwargs):
         xx = torch.cat([Or.separate_or(self.subformula1, inputs[0], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs), Or.separate_or(self.subformula2, inputs[1], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)], axis=-1)
-        return self.operation(xx, scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed)                                         # [batch_size, time_dim, ...]
+        return self.operation(xx, scale, dim=-1, keepdim=False, agm=agm, distributed=distributed)                                         # [batch_size, time_dim, ...]
 
     def _next_function(self):
         # next function is actually input (traverses the graph backwards)
@@ -699,21 +738,23 @@ class Until(STL_Formula):
         assert isinstance(self.subformula2, STL_Formula), "Subformula2 needs to be an stl formula"
         LARGE_NUMBER = 1E6
         interval = self.interval
-        trace1 = self.subformula1(inputs[0])
-        trace2 = self.subformula2(inputs[1])
+        trace1 = self.subformula1(inputs[0], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
+        trace2 = self.subformula2(inputs[1], pscale=pscale, scale=scale, keepdim=keepdim, agm=agm, distributed=distributed, **kwargs)
         Alw = Always(subformula=Identity(name=str(self.subformula1)))
         minish = Minish()
         maxish = Maxish()
         LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)
-        RHS = torch.ones_like(LHS)*-LARGE_NUMBER  
+        RHS = torch.ones_like(LHS)*-LARGE_NUMBER
         if interval == None:
             for i in range(trace2.shape[1]):
                 RHS[:,i:,:,i] = Alw(trace1[:,i:,:])
-            return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)   
-        elif interval[1] < np.Inf:
+            return maxish(
+                            minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed), 
+                        scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed)
+        elif interval[1] < np.Inf:  # [a, b] where b < ∞
             a = int(interval[0])
             b = int(interval[1])
-            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER] 
+            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER]
             for i in range(b,trace2.shape[1]):
                 A = trace2[:,i-b:i-a+1,:].unsqueeze(-1)
                 relevant = trace1[:,:i+1,:]
@@ -721,8 +762,8 @@ class Until(STL_Formula):
                 RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
             return torch.cat(RHS, dim=1);
         else:
-            a = int(interval[0])
-            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER] 
+            a = int(interval[0])   # [a, ∞] where a < ∞
+            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER]
             for i in range(a,trace2.shape[1]):
                 A = trace2[:,:i-a+1,:].unsqueeze(-1)
                 relevant = trace1[:,:i+1,:]
@@ -738,9 +779,12 @@ class Until(STL_Formula):
         return  "(" + str(self.subformula1) + ")" + " U " + "(" + str(self.subformula2) + ")"
 
 class Then(STL_Formula):
-    '''
-    subformula1 T subformula2
-    '''
+        '''
+        subformula1 T subformula2 (ϕ U ψ)
+        This assumes that ϕ is eventually true before ψ becomes true.
+        If overlap=True, then the last time step that ϕ is true, ψ starts being true. That is, sₜ ⊧ ϕ and sₜ ⊧ ψ.
+        If overlap=False, when ϕ stops being true, ψ starts being true. That is sₜ ⊧ ϕ and sₜ+₁ ⊧ ψ, but sₜ ¬⊧ ψ
+        '''
     def __init__(self, subformula1, subformula2, interval=None, overlap=True):
         super(Then, self).__init__()
         self.subformula1 = subformula1
@@ -765,15 +809,17 @@ class Then(STL_Formula):
         minish = Minish()
         maxish = Maxish()
         LHS = trace2.unsqueeze(-1).repeat([1, 1, 1,trace2.shape[1]]).permute(0, 3, 2, 1)
-        RHS = torch.ones_like(LHS)*-LARGE_NUMBER  
+        RHS = torch.ones_like(LHS)*-LARGE_NUMBER
         if interval == None:
             for i in range(trace2.shape[1]):
                 RHS[:,i:,:,i] = Ev(trace1[:,i:,:])
-            return maxish(minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1), scale=scale, dim=-1, keepdim=keepdim, agm=agm, distributed=distributed).squeeze(-1)   
-        elif interval[1] < np.Inf:
+            return maxish(
+                            minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed), 
+                        scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed)
+        elif interval[1] < np.Inf:  # [a, b] where b < ∞
             a = int(interval[0])
             b = int(interval[1])
-            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER] 
+            RHS = [torch.ones_like(trace1)[:,:b,:] * -LARGE_NUMBER]
             for i in range(b,trace2.shape[1]):
                 A = trace2[:,i-b:i-a+1,:].unsqueeze(-1)
                 relevant = trace1[:,:i+1,:]
@@ -781,8 +827,8 @@ class Then(STL_Formula):
                 RHS.append(maxish(minish(torch.cat([A,B], dim=-1), dim=-1, scale=scale, keepdim=False, distributed=distributed), dim=1, scale=scale, keepdim=keepdim, distributed=distributed))
             return torch.cat(RHS, dim=1);
         else:
-            a = int(interval[0])
-            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER] 
+            a = int(interval[0])   # [a, ∞] where a < ∞
+            RHS = [torch.ones_like(trace1)[:,:a,:] * -LARGE_NUMBER]
             for i in range(a,trace2.shape[1]):
                 A = trace2[:,:i-a+1,:].unsqueeze(-1)
                 relevant = trace1[:,:i+1,:]
@@ -809,7 +855,7 @@ class Integral1d(STL_Formula):
             for param in self.conv.parameters():
                 param.requires_grad = False
             self.conv.weight /= self.conv.weight
-            
+
 
 
     def construct_padding(self, padding_type, custom_number=100):
@@ -824,7 +870,7 @@ class Integral1d(STL_Formula):
             return None
 
     def robustness_trace(self, inputs, pscale=1, scale=-1, keepdim=False, use_relu=False, padding_type="same", custom_number=100, integration_scheme="riemann", **kwargs):
-        
+
         subformula_trace = self.subformula(inputs, pscale=pscale, scale=scale, keepdim=keepdim, **kwargs)
 
 
@@ -867,23 +913,23 @@ class Integral1d(STL_Formula):
 class Expression(torch.nn.Module):
     '''
     Wraps a pytorch arithmetic operation, so that we can intercept and overload comparison operators.
-    Expression allows us to express tensors using their names to make it easier to code up and read, 
+    Expression allows us to express tensors using their names to make it easier to code up and read,
     but also keep track of their numeric values.
     '''
     def __init__(self, name, value):
         super(Expression, self).__init__()
         self.name = name
         self.value = value
-        
+
     def set_name(self, new_name):
         self.name = new_name
-        
+
     def set_value(self, new_value):
         self.value = new_value
 
     def __neg__(self):
         return Expression(-self.value)
-    
+
     def __add__(self, other):
         if isinstance(other, Expression):
             return Expression(self.name + '+' + other.name, self.value + other.value)
@@ -893,7 +939,7 @@ class Expression(torch.nn.Module):
     def __radd__(self, other):
         return self.__add__(other)
         # No need for the case when "other" is an Expression, since that
-        # case will be handled by the regular add 
+        # case will be handled by the regular add
 
     def __sub__(self, other):
         if isinstance(other, Expression):
@@ -930,14 +976,14 @@ class Expression(torch.nn.Module):
             denom_name = denominator.name
             denominator = denominator.value
         return Expression(num_name + '/' + denom_name, numerator/denominator)
-        
+
     # Comparators
     def __lt__(lhs, rhs):
         assert isinstance(lhs, str) | isinstance(lhs, Expression), "LHS of LessThan needs to be a string or Expression"
         assert not isinstance(rhs, str), "RHS cannot be a string"
-        return LessThan(lhs, rhs) 
+        return LessThan(lhs, rhs)
         # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return LessThan(lhs, rhs) 
+        #     return LessThan(lhs, rhs)
         # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
@@ -952,7 +998,7 @@ class Expression(torch.nn.Module):
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return LessThan(lhs, rhs)
         # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return LessThan(lhs.name, rhs) 
+        #     return LessThan(lhs.name, rhs)
         # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
@@ -967,7 +1013,7 @@ class Expression(torch.nn.Module):
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return GreaterThan(lhs, rhs)
         # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return GreaterThan(lhs.name, rhs) 
+        #     return GreaterThan(lhs.name, rhs)
         # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
@@ -982,7 +1028,7 @@ class Expression(torch.nn.Module):
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return GreaterThan(lhs, rhs)
         # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return GreaterThan(lhs.name, rhs) 
+        #     return GreaterThan(lhs.name, rhs)
         # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
@@ -1002,14 +1048,14 @@ class Expression(torch.nn.Module):
         #     # This case cannot occur. If neither is an Expression, why are you calling this method?
         #     raise Exception('What are you doing?')
         # elif not isinstance(rhs, Expression):
-        #     return Equal(lhs.name, rhs) 
+        #     return Equal(lhs.name, rhs)
         # elif not isinstance(lhs, Expression):
         #     assert type(lhs)==str, "LHS of LessThan needs to be a string"
         #     return Equal(lhs, rhs)
 
     def __ne__(lhs, rhs):
         raise NotImplementedError("Not supported yet")
-        
+
     def __str__(self):
         return str(self.name)
 
