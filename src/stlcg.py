@@ -749,7 +749,7 @@ class Until(STL_Formula):
             for i in range(trace2.shape[1]):
                 RHS[:,i:,:,i] = Alw(trace1[:,i:,:])
             return maxish(
-                            minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed), 
+                            minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed),
                         scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed)
         elif interval[1] < np.Inf:  # [a, b] where b < ∞
             a = int(interval[0])
@@ -779,13 +779,14 @@ class Until(STL_Formula):
         return  "(" + str(self.subformula1) + ")" + " U " + "(" + str(self.subformula2) + ")"
 
 class Then(STL_Formula):
+
+    def __init__(self, subformula1, subformula2, interval=None, overlap=True):
         '''
         subformula1 T subformula2 (ϕ U ψ)
         This assumes that ϕ is eventually true before ψ becomes true.
         If overlap=True, then the last time step that ϕ is true, ψ starts being true. That is, sₜ ⊧ ϕ and sₜ ⊧ ψ.
         If overlap=False, when ϕ stops being true, ψ starts being true. That is sₜ ⊧ ϕ and sₜ+₁ ⊧ ψ, but sₜ ¬⊧ ψ
         '''
-    def __init__(self, subformula1, subformula2, interval=None, overlap=True):
         super(Then, self).__init__()
         self.subformula1 = subformula1
         self.subformula2 = subformula2
@@ -814,7 +815,7 @@ class Then(STL_Formula):
             for i in range(trace2.shape[1]):
                 RHS[:,i:,:,i] = Ev(trace1[:,i:,:])
             return maxish(
-                            minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed), 
+                            minish(torch.stack([LHS, RHS], dim=-1), scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed),
                         scale=scale, dim=-1, keepdim=False, agm=agm, distributed=distributed)
         elif interval[1] < np.Inf:  # [a, b] where b < ∞
             a = int(interval[0])
@@ -982,82 +983,29 @@ class Expression(torch.nn.Module):
         assert isinstance(lhs, str) | isinstance(lhs, Expression), "LHS of LessThan needs to be a string or Expression"
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return LessThan(lhs, rhs)
-        # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return LessThan(lhs, rhs)
-        # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
-        #     # This case cannot occur. If neither is an Expression, why are you calling this method?
-        #     raise Exception('What are you doing?')
-        # elif not isinstance(rhs, Expression):
-        #     return LessThan(lhs, rhs)
-        # elif not isinstance(lhs, Expression):
-        #     assert isinstance(lhs, str) | isinstance(lhs, Expression), "LHS of LessThan needs to be a string or Expression"
-        #     return LessThan(lhs, rhs.value)
 
     def __le__(lhs, rhs):
         assert isinstance(lhs, str) | isinstance(lhs, Expression), "LHS of LessThan needs to be a string or Expression"
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return LessThan(lhs, rhs)
-        # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return LessThan(lhs.name, rhs)
-        # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
-        #     # This case cannot occur. If neither is an Expression, why are you calling this method?
-        #     raise Exception('What are you doing?')
-        # elif not isinstance(rhs, Expression):
-        #     return LessThan(lhs.name, rhs)
-        # elif not isinstance(lhs, Expression):
-        #     assert type(lhs)==str, "LHS of LessThan needs to be a string"
-        #     return LessThan(lhs, rhs)
 
     def __gt__(lhs, rhs):
         assert isinstance(lhs, str) | isinstance(lhs, Expression), "LHS of GreaterThan needs to be a string or Expression"
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return GreaterThan(lhs, rhs)
-        # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return GreaterThan(lhs.name, rhs)
-        # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
-        #     # This case cannot occur. If neither is an Expression, why are you calling this method?
-        #     raise Exception('What are you doing?')
-        # elif not isinstance(rhs, Expression):
-        #     return GreaterThan(lhs.name, rhs)
-        # elif not isinstance(lhs, Expression):
-        #     assert type(lhs)==str, "LHS of LessThan needs to be a string"
-        #     return GreaterThan(lhs, rhs)
 
     def __ge__(lhs, rhs):
         assert isinstance(lhs, str) | isinstance(lhs, Expression), "LHS of GreaterThan needs to be a string or Expression"
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return GreaterThan(lhs, rhs)
-        # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return GreaterThan(lhs.name, rhs)
-        # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
-        #     # This case cannot occur. If neither is an Expression, why are you calling this method?
-        #     raise Exception('What are you doing?')
-        # elif not isinstance(rhs, Expression):
-        #     return GreaterThan(lhs.name, rhs)
-        # elif not isinstance(lhs, Expression):
-        #     assert type(lhs)==str, "LHS of LessThan needs to be a string"
-        #     return GreaterThan(lhs, rhs)
 
     def __eq__(lhs, rhs):
         assert isinstance(lhs, str) | isinstance(lhs, Expression), "LHS of Equal needs to be a string or Expression"
         assert not isinstance(rhs, str), "RHS cannot be a string"
         return Equal(lhs, rhs)
-        # if isinstance(lhs, Expression) and isinstance(rhs, Expression):
-        #     return Equal(lhs.name, rhs)
-        # elif (not isinstance(lhs, Expression)) and (not isinstance(rhs, Expression)):
-        #     # This case cannot occur. If neither is an Expression, why are you calling this method?
-        #     raise Exception('What are you doing?')
-        # elif not isinstance(rhs, Expression):
-        #     return Equal(lhs.name, rhs)
-        # elif not isinstance(lhs, Expression):
-        #     assert type(lhs)==str, "LHS of LessThan needs to be a string"
-        #     return Equal(lhs, rhs)
 
     def __ne__(lhs, rhs):
         raise NotImplementedError("Not supported yet")
 
     def __str__(self):
         return str(self.name)
-
-#     def __repr__(self):
-#         return repr()
