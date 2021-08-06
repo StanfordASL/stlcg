@@ -1,3 +1,0 @@
-python3 pstl.py 1 100 1  27.32s user 1.21s system 614% cpu 4.642 total
-python3 pstl.py 2 100 1  6.94s user 1.32s system 118% cpu 6.948 total
-python3 pstl.py 5 100 1  7.40s user 1.96s system 116% cpu 8.049 total
