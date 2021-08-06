@@ -1,24 +1,11 @@
 STLCG
 ======
 
-A toolbox to compute the robustness of STL formulas using computations graphs (PyTorch).
-
-The `wafr20` branch reproduces the results from our [WAFR2020 paper](http://asl.stanford.edu/wp-content/papercite-data/pdf/Leung.Arechiga.Pavone.WAFR20.pdf). Note that the stlcg code in the `master` and `dev` branches have been updated since. So the `wafr20` branch works in isolation. 
+A toolbox to compute the robustness of STL formulas using computations graphs.
 
 ## Installation
-This was done on a linux machine running Python 3.5. You may need to change some of the packages in requirements to make it work on your setup. If you are running Python3.6 or higher, you may need to remove `importlib==1.0.4`.
 
-First create a virtual environment
-```
-python3 -m venv stlcg-env
-source stlcg-env/bin/activate
-pip3 install -r requirements.txt
-```
-Then, since this project uses IPython notebooks, we'll install this conda environment as a kernel.
-```
-python3 -m ipykernel install --user --name stlcg-env --display-name "Python 3.X (stlcg)"
-```
-where X is the python3 version number.
+You need Python3 and PyTorch installed.
 
 The vizualization code here is constructed from https://github.com/szagoruyko/pytorchviz but with modifications to represent STL operators.
 
@@ -26,6 +13,8 @@ The vizualization code here is constructed from https://github.com/szagoruyko/py
 ## Usage
 
 `demo.ipynb` is an IPython jupyter notebook that showcases the basic functionality of the toolbox.
+
+The `examples` folder contains example usage of STLCG in a number of applications. These are the examples investigated in the WAFR 2020 publication (see below).
 
 ## Publications
 Here are a list of publications that use stlcg. Please file an issue, or pull request to add your publication to the list.

@@ -7,7 +7,7 @@ setuptools.setup(
     name="stlcg",
     version="0.0.1",
     author="Karen Leung and Nikos Arechiga",
-    author_email="karenl7@stanford.edu and nikos.arechiga@tri.global",
+    author_email="karen.ym.leung@gmail.com and nikos.arechiga@tri.global",
     description="A toolbox to compute the robustness of STL formulas using computations graphs (PyTorch).",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -19,3 +19,4 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
 )
+
