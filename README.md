@@ -1,7 +1,7 @@
 STLCG
 ======
 
-A toolbox to compute the robustness of STL formulas using computations graphs.
+A toolbox to compute the robustness of STL formulas using computation graphs. Since STLCG uses PyTorch, it provides a very easy way to incorporate STL formulas into neural network models (e.g., adding an STL term in the training loss).
 
 ## Installation
 
