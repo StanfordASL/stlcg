@@ -1,8 +1,18 @@
 # -*- coding: utf-8 -*-
 import torch
 import numpy as np
+from stlcg import Expression
 
 LARGE_NUMBER = 1E4
+
+def reverse_time(signal, dim):
+    if isinstance(signal, Expression):
+        signal.flip(dim)
+    elif isinstance(signal, torch.Tensor):
+        signal = signal.flip(dim)
+    else:
+        raise ValueError("Unknown signal type")
+    return signal
 
 def bump(input_tensor, left, right, slope):
     '''
@@ -45,3 +55,15 @@ def print_learning_progress(formula, inputs, var_dict, i, loss, scale):
     string += " ---- true value:%.3f"
     vals.append(formula.robustness(inputs).detach().numpy())
     print(string%tuple(vals))
+
+
+def plot_add_signal_Expression(ax, exp : Expression, time_dim=1, time=None, plot_reversed=False, **fmt):
+    trace = exp.value.detach()
+    if exp.reversed is not plot_reversed:
+        trace = trace.flip(time_dim)
+    if time is None:
+        time = range(trace.shape[time_dim])
+    for tr in trace:
+        ax.plot(time, tr, '.-', label=exp.name, **fmt)
+    return ax
+
