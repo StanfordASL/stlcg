@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
 import torch
-import numpy as np
 from stlcg import Expression
 
 LARGE_NUMBER = 1E4

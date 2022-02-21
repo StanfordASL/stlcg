@@ -1,11 +1,7 @@
 from collections import namedtuple
-from distutils.version import LooseVersion
 from graphviz import Digraph
-from numpy import isin
 import torch
-from torch.autograd import Variable
 from stlcg import Expression, STL_Formula
-import IPython
 Node = namedtuple('Node', ('name', 'inputs', 'attr', 'op'))
 
 
