@@ -51,12 +51,12 @@ def print_learning_progress(formula, inputs, var_dict, i, loss, scale):
     string += " ---- scale:%.3f"
     vals.append(scale)
     string += " ---- true value:%.3f"
-    vals.append(formula.robustness(inputs).detach().numpy())
+    vals.append(formula.robustness(inputs).mean().detach().cpu().numpy())
     print(string%tuple(vals))
 
 
 def plot_add_signal_Expression(ax, exp : Expression, time_dim=1, time=None, plot_reversed=False, **fmt):
-    trace = exp.value.detach()
+    trace = exp.value.detach().cpu()
     if exp.reversed is not plot_reversed:
         trace = trace.flip(time_dim)
     if time is None:
