@@ -1,2 +1,3 @@
 graphviz>=0.19.1
+numpy >= 1.22.2
 torch>=1.9.1+cpu; python_version < "3.8"
