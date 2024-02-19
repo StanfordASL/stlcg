@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 # import IPython
-# from utils import tensor_to_str
+# from stlcg.utils import tensor_to_str
 """
 Important information:
 - This has the option to use an arithmetic-geometric mean robustness metric: https://arxiv.org/pdf/1903.05186.pdf. The default is not to use it. But this is still being tested.
