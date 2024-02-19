@@ -21,8 +21,8 @@ classifiers = [
 [project.urls]
 repository = "https://github.com/StanfordASL/stlcg"
 
-[tool.setuptools]
-packages = ["stlcg"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.isort]
 profile = "black"
