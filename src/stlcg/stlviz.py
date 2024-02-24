@@ -1,21 +1,29 @@
 from collections import namedtuple
 from distutils.version import LooseVersion
-from graphviz import Digraph
-import torch
-from torch.autograd import Variable
-from stlcg import Expression, STL_Formula
+
 import IPython
-Node = namedtuple('Node', ('name', 'inputs', 'attr', 'op'))
+import torch
+from graphviz import Digraph
+from torch.autograd import Variable
+
+from stlcg import Expression, STL_Formula
+
+Node = namedtuple("Node", ("name", "inputs", "attr", "op"))
 
 
-def make_stl_graph(form, node_attr=dict(style='filled',
-                                          shape='box',
-                                          align='left',
-                                          fontsize='12',
-                                          ranksep='0.1',
-                                          height='0.2'),
-                         graph_attr=dict(size="12,12")):
-    """ Produces Graphviz representation of PyTorch autograd graph.
+def make_stl_graph(
+    form,
+    node_attr=dict(
+        style="filled",
+        shape="box",
+        align="left",
+        fontsize="12",
+        ranksep="0.1",
+        height="0.2",
+    ),
+    graph_attr=dict(size="12,12"),
+):
+    """Produces Graphviz representation of PyTorch autograd graph.
     Blue nodes are the Variables that require grad, orange are Tensors
     saved for backward in torch.autograd.Function
     Args:
@@ -34,7 +42,7 @@ def make_stl_graph(form, node_attr=dict(style='filled',
     seen = set()
 
     def size_to_str(size):
-        return '(' + (', ').join(['%d' % v for v in size]) + ')'
+        return "(" + (", ").join(["%d" % v for v in size]) + ")"
 
     def tensor_to_str(tensor):
         device = tensor.device.type
@@ -61,12 +69,14 @@ def make_stl_graph(form, node_attr=dict(style='filled',
         elif type(form) == str:
             dot.node(str(id(form)), form, fillcolor="lightcoral")
         elif isinstance(form, STL_Formula):
-            dot.node(str(id(form)), form._get_name() + "\n" + str(form), fillcolor="orange")
+            dot.node(
+                str(id(form)), form._get_name() + "\n" + str(form), fillcolor="orange"
+            )
         else:
             dot.node(str(id(form)), str(form), fillcolor="lightcoral")
 
         # recursive call to all the components of the formula
-        if hasattr(form, '_next_function'):
+        if hasattr(form, "_next_function"):
             for u in form._next_function():
                 dot.edge(str(id(u)), str(id(form)))
                 add_nodes(u)
@@ -97,7 +107,6 @@ def make_stl_graph(form, node_attr=dict(style='filled',
     #                 dot.edge(str(id(t)), str(id(var)))
     #                 add_nodes(t)
 
-    
     # handle multiple outputs
     if isinstance(form, tuple):
         for v in form:
@@ -122,5 +131,5 @@ def resize_graph(dot, size_per_element=0.15, min_size=12):
     dot.graph_attr.update(size=size_str)
 
 
-def save_graph(dot, filename, format='pdf', cleanup=True):
+def save_graph(dot, filename, format="pdf", cleanup=True):
     dot.render(filename=filename, format=format, cleanup=cleanup)

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stlcg"
+version = "0.0.1"
+authors = [
+  { name = "Karen Leung", email = "karen.ym.leung@gmail.com" },
+  { name = "Nikos Arechiga", email = "nikos.arechiga@tri.global" },
+]
+description = "A toolbox to compute the robustness of STL formulas using computations graphs (PyTorch)."
+readme = "README.md"
+
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+repository = "https://github.com/StanfordASL/stlcg"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+skip_gitignore = false
+group_by_package = true
